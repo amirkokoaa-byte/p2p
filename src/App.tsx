@@ -493,11 +493,22 @@ function CompressScreen({ getHistory, onOpenViewer }: any) {
 export default function App() {
   const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin' | 'premium'>('auth');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [users, setUsers] = useState<Record<string, UserData>>({});
   
   const [vaultPassword, setVaultPassword] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<{ blob: Blob, name: string, type: string } | null>(null);
   const [resendFile, setResendFile] = useState<{ blob: Blob, name: string, mime: string, size: number } | null>(null);
+
+  const [homeSessionStart, setHomeSessionStart] = useState(Date.now());
+  const prevViewRef = useRef(currentView);
+
+  useEffect(() => {
+    if (currentView === 'home' && !['send', 'receive', 'home'].includes(prevViewRef.current)) {
+      setHomeSessionStart(Date.now());
+    }
+    prevViewRef.current = currentView;
+  }, [currentView]);
 
   const [settings, setSettings] = useState<AppSettings>({
     appName: 'النقل السريع P2P',
@@ -603,15 +614,22 @@ export default function App() {
     setVaultPassword(null);
   };
 
+  
   if (currentView === 'auth') {
     return <AuthScreen onLogin={(username) => {
       setCurrentUser(username);
       setCurrentView('home');
-      if (username !== 'admin' && !users[username]) {
-        handleUpdateUser(username, { username, isPremium: false, premiumExpiryDate: null });
+      if (username !== 'admin') {
+        const u = users[username];
+        if (u && u.isPremium) {
+           setShowPremiumWelcome(true);
+        } else if (!u) {
+           handleUpdateUser(username, { username, isPremium: false, premiumExpiryDate: null });
+        }
       }
     }} />;
   }
+
 
   return (
     <div className="flex justify-center bg-[#E5E7EB] min-h-screen rtl font-sans" dir="rtl">
@@ -640,13 +658,17 @@ export default function App() {
                  <Settings2 size={22} />
                </button>
             )}
+            
             {currentView === 'home' && currentUser !== 'admin' && (
                <div className="flex items-center gap-1">
-                 <button onClick={() => setCurrentView('premium')} className="flex items-center gap-1 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-3 py-1.5 rounded-full shadow hover:opacity-90 transition-opacity">
-                   <Crown size={16} className="text-white fill-current" />
-                   <span className="text-sm font-bold">Premium</span>
-                 </button>
+                 {!users[currentUser]?.isPremium && (
+                   <button onClick={() => setCurrentView('premium')} className="flex items-center gap-1 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-3 py-1.5 rounded-full shadow hover:opacity-90 transition-opacity">
+                     <Crown size={16} className="text-white fill-current" />
+                     <span className="text-sm font-bold">Premium</span>
+                   </button>
+                 )}
                  <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-red-300 ml-1">
+
                    <LogOut size={22} />
                  </button>
                </div>
@@ -667,7 +689,7 @@ export default function App() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto pb-20 custom-scrollbar relative">
-          {currentView === 'home' && <HomeScreen onNavigate={setCurrentView} />}
+          {currentView === 'home' && <HomeScreen onNavigate={setCurrentView} sessionStartTime={homeSessionStart} onOpenViewer={openViewer} />}
           {currentView === 'history' && <HistoryScreen onOpenViewer={openViewer} onMoveToVault={moveFileToVault} onResend={handleResend} />}
           {currentView === 'vault' && <VaultScreen vaultPassword={vaultPassword} setVaultPassword={setVaultPassword} onOpenViewer={openViewer} />}
           {currentView === 'send' && <SendScreen onBack={() => { setResendFile(null); setCurrentView('home'); }} resendFile={resendFile} onClearResend={() => setResendFile(null)} settings={settings} currentUser={currentUser} userData={currentUser ? users[currentUser] : null} onLimitExceeded={() => setCurrentView('premium')} />}
@@ -1195,43 +1217,110 @@ function AdminScreen({ currentSettings, onBack, onLogout, users, onUpdateUser, o
   );
 }
 
-function HomeScreen({ onNavigate }: { onNavigate: (v: 'send'|'receive') => void }) {
+
+function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
+  const [recentRecords, setRecentRecords] = useState<any[]>([]);
+
+  useEffect(() => {
+    const updateRecords = () => {
+      const history = JSON.parse(localStorage.getItem('p2p_history') || '[]');
+      const filtered = history.filter((r: any) => r.timestamp >= sessionStartTime && !r.vaulted);
+      setRecentRecords(filtered);
+    };
+    updateRecords();
+    window.addEventListener('history_updated', updateRecords);
+    return () => window.removeEventListener('history_updated', updateRecords);
+  }, [sessionStartTime]);
+
+  const getIcon = (type: string) => {
+    if (type === 'video') return <Video className="text-[#003366]" size={18} />;
+    if (type === 'image') return <ImageIcon className="text-[#003366]" size={18} />;
+    return <FileIcon className="text-[#003366]" size={18} />;
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   return (
-    <div className="p-6 flex flex-col gap-6 h-full justify-center pb-24">
-      <div className="text-center mb-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-[#003366] mb-4 shadow-inner">
-          <Wifi size={32} />
+    <div className="p-6 flex flex-col h-full bg-[#F8F9FA] overflow-y-auto pb-24">
+      <div className="text-center mb-8 mt-4 animate-in slide-in-from-top-4 duration-500">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-100 to-white text-[#003366] mb-4 shadow-sm border border-white">
+          <Wifi size={40} className="drop-shadow-sm" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800">نقل ملفات</h2>
-        <p className="text-sm text-gray-500 mt-2">مباشر، آمن، وبدون خوادم وسيطة</p>
+        <h2 className="text-2xl font-black text-gray-800 tracking-tight">نقل ملفات سريع</h2>
+        <p className="text-sm text-gray-500 mt-2 font-medium">مباشر، آمن، وبدون خوادم وسيطة</p>
       </div>
 
-      <button 
-        onClick={() => onNavigate('send')}
-        className="bg-[#003366] text-white rounded-[2rem] p-8 flex flex-col items-center gap-4 shadow-xl shadow-blue-900/20 hover:bg-[#002244] transition-all transform active:scale-95 group relative overflow-hidden"
-      >
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center shadow-inner relative z-10">
-          <Send size={36} className="ml-1" />
-        </div>
-        <div className="text-center relative z-10">
-          <h2 className="text-3xl font-bold mb-1">إرسال</h2>
-          <p className="text-blue-200 text-sm font-medium">مشاركة ملفات، صور، وفيديوهات</p>
-        </div>
-      </button>
+      <div className="flex flex-row gap-4 mb-8">
+        <button 
+          onClick={() => onNavigate('send')}
+          className="flex-1 bg-[#003366] text-white rounded-3xl p-6 flex flex-col items-center gap-3 shadow-lg shadow-blue-900/20 hover:shadow-[0_0_20px_rgba(0,51,102,0.6)] hover:bg-[#002244] transition-all duration-300 transform active:scale-95 group relative overflow-hidden border border-[#004080]"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shadow-inner relative z-10 group-hover:scale-110 transition-transform duration-300">
+            <Send size={32} className="ml-1 drop-shadow-md" />
+          </div>
+          <div className="text-center relative z-10 w-full">
+            <h2 className="text-xl font-bold mb-1 truncate">إرسال</h2>
+            <p className="text-blue-200 text-xs font-medium truncate w-full">مشاركة فورية</p>
+          </div>
+        </button>
 
-      <button 
-        onClick={() => onNavigate('receive')}
-        className="bg-white text-[#003366] border-2 border-[#003366] rounded-[2rem] p-8 flex flex-col items-center gap-4 shadow-lg hover:bg-blue-50 transition-all transform active:scale-95 group"
-      >
-        <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center shadow-inner group-hover:bg-blue-100 transition-colors">
-          <Download size={36} />
+        <button 
+          onClick={() => onNavigate('receive')}
+          className="flex-1 bg-white text-[#003366] border border-blue-100 rounded-3xl p-6 flex flex-col items-center gap-3 shadow-lg shadow-blue-900/5 hover:shadow-[0_0_20px_rgba(0,51,102,0.2)] hover:bg-blue-50 transition-all duration-300 transform active:scale-95 group relative overflow-hidden"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-blue-50/50 flex items-center justify-center shadow-inner relative z-10 group-hover:bg-white group-hover:scale-110 transition-all duration-300 border border-blue-100/50">
+            <Download size={32} className="drop-shadow-sm text-blue-600" />
+          </div>
+          <div className="text-center relative z-10 w-full">
+            <h2 className="text-xl font-bold mb-1 truncate">استقبال</h2>
+            <p className="text-gray-500 text-xs font-medium truncate w-full">استلام بالكود</p>
+          </div>
+        </button>
+      </div>
+
+      {recentRecords.length > 0 && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+           <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+             <Sparkles size={18} className="text-amber-500" />
+             العمليات المنتهية للتو
+           </h3>
+           <div className="space-y-3">
+             {recentRecords.map(record => (
+               <div 
+                 key={record.id} 
+                 onClick={() => onOpenViewer(record)}
+                 className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
+               >
+                 <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100 relative overflow-hidden">
+                   <Thumbnail record={record} icon={getIcon(record.type)} />
+                 </div>
+                 
+                 <div className="flex-1 min-w-0">
+                   <h3 className="font-bold text-gray-800 truncate text-[14px]" dir="ltr">{record.name}</h3>
+                   <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 font-medium">
+                     <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}`}>
+                       {record.isSent ? <Send size={8} /> : <Download size={8} />}
+                       {record.isSent ? 'مُرسل' : 'مُستلم'}
+                     </span>
+                     <span>{formatSize(record.size)}</span>
+                   </div>
+                 </div>
+                 
+                 <div className="shrink-0 text-green-500 bg-green-50 p-2 rounded-full">
+                   <CheckCircle2 size={16} />
+                 </div>
+               </div>
+             ))}
+           </div>
         </div>
-        <div className="text-center">
-          <h2 className="text-3xl font-bold mb-1">استقبال</h2>
-          <p className="text-[#003366]/70 text-sm font-medium">استلام الملفات عبر الكود</p>
-        </div>
-      </button>
+      )}
     </div>
   );
 }
@@ -1321,15 +1410,13 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
     let allowedImages = settings?.freeImagesLimit || 20;
     let allowedVideos = settings?.freeVideosLimit || 4;
     
+    
     const isPremium = userData?.isPremium;
-    if (isPremium) {
-      allowedImages = 500;
-      allowedVideos = 50;
+    if (isPremium || currentUser === 'admin') {
+      allowedImages = Infinity;
+      allowedVideos = Infinity;
     }
-    if (currentUser === 'admin') {
-      allowedImages = 500;
-      allowedVideos = 50;
-    }
+
 
     const imageCount = files.filter(f => f.type.startsWith('image/')).length;
     const videoCount = files.filter(f => f.type.startsWith('video/')).length;
@@ -1459,6 +1546,12 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
   const [transferSuccess, setTransferSuccess] = useState(false);
   const [receivedFileDetails, setReceivedFileDetails] = useState<{name: string, size: number} | null>(null);
 
+  const [currentFileTransferred, setCurrentFileTransferred] = useState(0);
+  const [transferSpeed, setTransferSpeed] = useState(0);
+  const [eta, setEta] = useState<number | null>(null);
+  const speedRef = useRef({ lastBytes: 0, lastTime: 0 });
+
+
   const peerRef = useRef<Peer | null>(null);
 
   useEffect(() => {
@@ -1486,7 +1579,13 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
 
   const setupReceiver = (conn: DataConnection) => {
     let receivedBuffers: ArrayBuffer[] = [];
-    let receivedSize = 0;
+    let 
+        receivedSize = 0;
+        setCurrentFileTransferred(0);
+        setTransferSpeed(0);
+        setEta(null);
+        speedRef.current = { lastBytes: 0, lastTime: performance.now() };
+
     let fileMeta: any = null;
 
     conn.on('data', (msg: any) => {
@@ -1496,12 +1595,31 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
         fileMeta = msg;
         setReceivedFileDetails({ name: msg.name, size: msg.size });
         receivedBuffers = [];
+        
         receivedSize = 0;
+        setCurrentFileTransferred(0);
+        setTransferSpeed(0);
+        setEta(null);
+        speedRef.current = { lastBytes: 0, lastTime: performance.now() };
+
         conn.send({ type: 'ack' });
       } else if (msg.type === 'chunk') {
         receivedBuffers.push(msg.data);
+
         receivedSize += msg.data.byteLength;
         setProgress(Math.round((receivedSize / fileMeta.size) * 100));
+        setCurrentFileTransferred(receivedSize);
+
+        const now = performance.now();
+        if (now - speedRef.current.lastTime >= 1000) {
+          const bytesSinceLast = receivedSize - speedRef.current.lastBytes;
+          const timeSinceLast = (now - speedRef.current.lastTime) / 1000;
+          const speed = bytesSinceLast / timeSinceLast;
+          setTransferSpeed(speed);
+          setEta(speed > 0 ? (fileMeta.size - receivedSize) / speed : null);
+          speedRef.current = { lastBytes: receivedSize, lastTime: now };
+        }
+
         conn.send({ type: 'ack' });
       } else if (msg.type === 'eof') {
         const blob = new Blob(receivedBuffers, { type: fileMeta.mime });
@@ -1568,9 +1686,21 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
                 <span>جاري الاستلام...</span>
                 <span>{progress}%</span>
               </div>
+              
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
               </div>
+              <div className="flex justify-between items-center text-xs font-medium mt-1 text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                 <div className="flex flex-col gap-1 text-right">
+                   <span className="text-[#003366] font-bold">الحجم الإجمالي: {formatSize(receivedFileDetails?.size || 0)}</span>
+                   <span>تم استلام: {formatSize(currentFileTransferred)}</span>
+                 </div>
+                 <div className="flex flex-col items-end gap-1">
+                    <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded-md font-bold" dir="ltr">{formatSize(transferSpeed)}/s</span>
+                    <span className="text-[#003366] font-bold">{formatTime(eta)}</span>
+                 </div>
+              </div>
+
             </div>
           )}
           {transferSuccess && (
@@ -2023,6 +2153,29 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
             </div>
           </div>
         ))
+      )}
+
+      {showPremiumWelcome && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-amber-400 to-amber-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <Crown size={32} />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">أهلاً بك في الباقة المميزة!</h3>
+                <p className="text-gray-600 font-medium text-sm mb-6 leading-relaxed">
+                  تم شراء الباقة بنجاح ({users[currentUser!]?.premiumExpiryDate === null ? 'مدى الحياة' : (users[currentUser!]?.premiumExpiryDate! - Date.now() > 300*24*60*60*1000 ? 'سنوية' : 'شهرية')}).<br/>
+                  تم أخذ الصلاحيات كاملة وغير محدودة.
+                </p>
+                <button 
+                  onClick={() => setShowPremiumWelcome(false)}
+                  className="w-full bg-[#003366] text-white hover:bg-blue-900 py-3.5 rounded-xl font-bold transition-colors shadow-md"
+                >
+                  استمرار
+                </button>
+              </div>
+           </div>
+        </div>
       )}
     </div>
   );
