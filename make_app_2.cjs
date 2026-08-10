@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+const fs = require('fs');
+
+const code = `import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
@@ -162,7 +164,7 @@ export default function App() {
       const arrayBuffer = await fileBlob.arrayBuffer();
       const { encrypted, iv, salt } = await encryptData(arrayBuffer, vaultPassword);
       
-      await localforage.setItem(`vault_${record.id}`, { encrypted, iv, salt });
+      await localforage.setItem(\`vault_\${record.id}\`, { encrypted, iv, salt });
       await localforage.removeItem(record.id);
       
       const history = getHistory();
@@ -183,7 +185,7 @@ export default function App() {
           alert('المحفظة مقفلة.');
           return;
         }
-        const vaultedStr = await localforage.getItem<any>(`vault_${record.id}`);
+        const vaultedStr = await localforage.getItem<any>(\`vault_\${record.id}\`);
         if (!vaultedStr) return alert('الملف غير موجود.');
         const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
         const blob = new Blob([decryptedBuf], { type: record.mime });
@@ -292,8 +294,8 @@ export default function App() {
 function NavItem({ view, current, icon, label, onClick }: any) {
   const active = current === view;
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors p-2 ${active ? 'text-[#003366]' : 'text-gray-400 hover:text-gray-600'}`}>
-      <div className={`p-1.5 rounded-xl ${active ? 'bg-blue-50' : 'bg-transparent'}`}>{icon}</div>
+    <button onClick={onClick} className={\`flex flex-col items-center gap-1 transition-colors p-2 \${active ? 'text-[#003366]' : 'text-gray-400 hover:text-gray-600'}\`}>
+      <div className={\`p-1.5 rounded-xl \${active ? 'bg-blue-50' : 'bg-transparent'}\`}>{icon}</div>
       <span className="text-[10px] font-bold">{label}</span>
     </button>
   );
@@ -347,11 +349,11 @@ function AuthScreen({ onLogin }: { onLogin: (username: string) => void }) {
 
         <div className="flex bg-gray-100 rounded-xl p-1 mb-8">
           <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={\`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all \${isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}\`}
             onClick={() => setIsLogin(true)}
           >تسجيل دخول</button>
           <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={\`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all \${!isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}\`}
             onClick={() => setIsLogin(false)}
           >حساب جديد</button>
         </div>
@@ -419,9 +421,9 @@ function AdminScreen({ currentSettings, onBack, onLogout }: any) {
           </h3>
           <button 
             onClick={() => setBannerEnabled(!bannerEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bannerEnabled ? 'bg-[#003366]' : 'bg-gray-300'}`}
+            className={\`relative inline-flex h-6 w-11 items-center rounded-full transition-colors \${bannerEnabled ? 'bg-[#003366]' : 'bg-gray-300'}\`}
           >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bannerEnabled ? '-translate-x-6' : '-translate-x-1'}`} />
+            <span className={\`inline-block h-4 w-4 transform rounded-full bg-white transition-transform \${bannerEnabled ? '-translate-x-6' : '-translate-x-1'}\`} />
           </button>
         </div>
 
@@ -439,9 +441,9 @@ function AdminScreen({ currentSettings, onBack, onLogout }: any) {
               <span className="text-sm font-bold text-gray-700">شريط متحرك (Marquee)</span>
               <button 
                 onClick={() => setBannerScrolling(!bannerScrolling)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bannerScrolling ? 'bg-[#003366]' : 'bg-gray-300'}`}
+                className={\`relative inline-flex h-6 w-11 items-center rounded-full transition-colors \${bannerScrolling ? 'bg-[#003366]' : 'bg-gray-300'}\`}
               >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bannerScrolling ? '-translate-x-6' : '-translate-x-1'}`} />
+                <span className={\`inline-block h-4 w-4 transform rounded-full bg-white transition-transform \${bannerScrolling ? '-translate-x-6' : '-translate-x-1'}\`} />
               </button>
             </div>
           </div>
@@ -514,7 +516,7 @@ function SendScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const id = Math.floor(100000 + Math.random() * 900000).toString();
     setPeerId(id);
-    const peer = new Peer(`${APP_PREFIX}${id}`);
+    const peer = new Peer(\`\${APP_PREFIX}\${id}\`);
     peerRef.current = peer;
 
     peer.on('connection', (conn) => {
@@ -616,7 +618,7 @@ function SendScreen({ onBack }: { onBack: () => void }) {
                 <span>{progress}%</span>
               </div>
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: \`\${progress}%\` }} />
               </div>
             </div>
           )}
@@ -657,7 +659,7 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
   const handleConnect = () => {
     if (!targetId || targetId.length !== 6 || !peerRef.current) return;
     setIsConnecting(true);
-    const conn = peerRef.current.connect(`${APP_PREFIX}${targetId}`, { reliable: true });
+    const conn = peerRef.current.connect(\`\${APP_PREFIX}\${targetId}\`, { reliable: true });
     
     conn.on('open', () => {
       setIsConnecting(false);
@@ -757,7 +759,7 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
                 <span>{progress}%</span>
               </div>
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: \`\${progress}%\` }} />
               </div>
             </div>
           )}
@@ -835,7 +837,7 @@ function HistoryScreen({ onOpenViewer, onMoveToVault }: any) {
                   </div>
                 )}
               </div>
-              <div className={`p-1 rounded-full ${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}`}>
+              <div className={\`p-1 rounded-full \${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}\`}>
                 {record.isSent ? <Send size={12} /> : <Download size={12} />}
               </div>
             </div>
@@ -894,11 +896,11 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
       const { encrypted, iv, salt } = await encryptData(new TextEncoder().encode('vault_check').buffer, newPass);
       
       for (const record of records) {
-        const vaultedStr = await localforage.getItem<any>(`vault_${record.id}`);
+        const vaultedStr = await localforage.getItem<any>(\`vault_\${record.id}\`);
         if (vaultedStr) {
           const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
           const newEnc = await encryptData(decryptedBuf, newPass);
-          await localforage.setItem(`vault_${record.id}`, newEnc);
+          await localforage.setItem(\`vault_\${record.id}\`, newEnc);
         }
       }
 
@@ -1032,3 +1034,5 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
     </div>
   );
 }
+`;
+fs.writeFileSync('src/App.tsx', code);

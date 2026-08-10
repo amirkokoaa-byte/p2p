@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+const fs = require('fs');
+
+const code = `import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
-  UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole,
-  User, LogOut, ShieldAlert, AlignLeft, Settings2
+  UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole
 } from 'lucide-react';
 import Peer, { DataConnection } from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
@@ -20,13 +21,6 @@ interface TransferRecord {
   type: string;
   mime: string;
   vaulted?: boolean;
-}
-
-interface AppSettings {
-  appName: string;
-  bannerEnabled: boolean;
-  bannerText: string;
-  bannerScrolling: boolean;
 }
 
 // --- Crypto Helpers (AES-256 GCM) ---
@@ -122,30 +116,9 @@ function FileViewer({ file, onClose }: { file: { blob: Blob, name: string, type:
 
 // --- Main App Component ---
 export default function App() {
-  const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin'>('auth');
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  
+  const [currentView, setCurrentView] = useState<'home' | 'history' | 'send' | 'receive' | 'vault'>('home');
   const [vaultPassword, setVaultPassword] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<{ blob: Blob, name: string, type: string } | null>(null);
-
-  const [settings, setSettings] = useState<AppSettings>({
-    appName: 'النقل السريع P2P',
-    bannerEnabled: false,
-    bannerText: '',
-    bannerScrolling: true
-  });
-
-  useEffect(() => {
-    const loadSettings = () => {
-      const stored = localStorage.getItem('p2p_settings');
-      if (stored) {
-        setSettings(JSON.parse(stored));
-      }
-    };
-    loadSettings();
-    window.addEventListener('settings_updated', loadSettings);
-    return () => window.removeEventListener('settings_updated', loadSettings);
-  }, []);
 
   const moveFileToVault = async (record: TransferRecord) => {
     if (!vaultPassword) {
@@ -162,7 +135,7 @@ export default function App() {
       const arrayBuffer = await fileBlob.arrayBuffer();
       const { encrypted, iv, salt } = await encryptData(arrayBuffer, vaultPassword);
       
-      await localforage.setItem(`vault_${record.id}`, { encrypted, iv, salt });
+      await localforage.setItem(\`vault_\${record.id}\`, { encrypted, iv, salt });
       await localforage.removeItem(record.id);
       
       const history = getHistory();
@@ -183,7 +156,7 @@ export default function App() {
           alert('المحفظة مقفلة.');
           return;
         }
-        const vaultedStr = await localforage.getItem<any>(`vault_${record.id}`);
+        const vaultedStr = await localforage.getItem<any>(\`vault_\${record.id}\`);
         if (!vaultedStr) return alert('الملف غير موجود.');
         const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
         const blob = new Blob([decryptedBuf], { type: record.mime });
@@ -199,58 +172,28 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentView('auth');
-    setVaultPassword(null);
-  };
-
-  if (currentView === 'auth') {
-    return <AuthScreen onLogin={(username) => { setCurrentUser(username); setCurrentView('home'); }} />;
-  }
-
   return (
     <div className="flex justify-center bg-[#E5E7EB] min-h-screen rtl font-sans" dir="rtl">
       <div className="w-full max-w-md bg-[#F8F9FA] h-screen shadow-2xl flex flex-col relative overflow-hidden">
         
         {/* App Bar */}
-        <header className="bg-[#003366] text-white p-4 shadow-md z-10 flex flex-col shrink-0">
-          <div className="flex justify-between items-center w-full">
-            <div className="flex items-center gap-3">
-              {['send', 'receive', 'admin'].includes(currentView) && (
-                <button onClick={() => setCurrentView('home')} className="p-1 hover:bg-white/10 rounded-full transition-colors">
-                  <ArrowRight size={24} />
-                </button>
-              )}
-              <h1 className="text-xl font-bold">
-                {currentView === 'home' ? settings.appName : 
-                 currentView === 'history' ? 'سجل النقل' : 
-                 currentView === 'vault' ? 'المحفظة المشفرة' :
-                 currentView === 'admin' ? 'إعدادات البرنامج' :
-                 currentView === 'send' ? 'إرسال ملف' : 'استقبال ملف'}
-              </h1>
-            </div>
-            
-            {currentView === 'home' && currentUser === 'admin' && (
-               <button onClick={() => setCurrentView('admin')} className="p-2 hover:bg-white/10 rounded-full transition-colors ml-1">
-                 <Settings2 size={22} />
-               </button>
+        <header className="bg-[#003366] text-white p-4 shadow-md z-10 flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-3">
+            {['send', 'receive'].includes(currentView) && (
+              <button onClick={() => setCurrentView('home')} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                <ArrowRight size={24} />
+              </button>
             )}
-            {currentView === 'home' && currentUser !== 'admin' && (
-               <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-red-300 ml-1">
-                 <LogOut size={22} />
-               </button>
-            )}
+            <h1 className="text-xl font-bold">
+              {currentView === 'home' ? 'النقل السريع P2P' : 
+               currentView === 'history' ? 'سجل النقل' : 
+               currentView === 'vault' ? 'المحفظة المشفرة' :
+               currentView === 'send' ? 'إرسال ملف' : 'استقبال ملف'}
+            </h1>
           </div>
-          
-          {/* Banner */}
-          {settings.bannerEnabled && settings.bannerText && currentView === 'home' && (
-             <div className="mt-3 bg-yellow-400 text-yellow-900 px-3 py-1.5 rounded-lg text-sm font-bold overflow-hidden whitespace-nowrap shadow-sm border border-yellow-500/50">
-                {settings.bannerScrolling ? (
-                  <div className="inline-block animate-[marquee_10s_linear_infinite]">{settings.bannerText}</div>
-                ) : (
-                  <div className="text-center">{settings.bannerText}</div>
-                )}
+          {currentView === 'home' && (
+             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20 shadow-sm">
+               <span className="text-sm font-bold text-blue-50">PT</span>
              </div>
           )}
         </header>
@@ -262,7 +205,6 @@ export default function App() {
           {currentView === 'vault' && <VaultScreen vaultPassword={vaultPassword} setVaultPassword={setVaultPassword} onOpenViewer={openViewer} />}
           {currentView === 'send' && <SendScreen onBack={() => setCurrentView('home')} />}
           {currentView === 'receive' && <ReceiveScreen onBack={() => setCurrentView('home')} />}
-          {currentView === 'admin' && <AdminScreen currentSettings={settings} onBack={() => setCurrentView('home')} onLogout={handleLogout} />}
         </main>
 
         {/* Bottom Navigation */}
@@ -278,13 +220,6 @@ export default function App() {
       {viewingFile && (
         <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
       )}
-      
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -292,172 +227,14 @@ export default function App() {
 function NavItem({ view, current, icon, label, onClick }: any) {
   const active = current === view;
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors p-2 ${active ? 'text-[#003366]' : 'text-gray-400 hover:text-gray-600'}`}>
-      <div className={`p-1.5 rounded-xl ${active ? 'bg-blue-50' : 'bg-transparent'}`}>{icon}</div>
+    <button onClick={onClick} className={\`flex flex-col items-center gap-1 transition-colors p-2 \${active ? 'text-[#003366]' : 'text-gray-400 hover:text-gray-600'}\`}>
+      <div className={\`p-1.5 rounded-xl \${active ? 'bg-blue-50' : 'bg-transparent'}\`}>{icon}</div>
       <span className="text-[10px] font-bold">{label}</span>
     </button>
   );
 }
 
 // --- Screens ---
-
-function AuthScreen({ onLogin }: { onLogin: (username: string) => void }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username || !password) return alert('الرجاء إدخال اسم المستخدم وكلمة المرور');
-
-    if (username === 'admin' && password === 'admin') {
-      onLogin('admin');
-      return;
-    }
-
-    const users = JSON.parse(localStorage.getItem('p2p_users') || '{}');
-    
-    if (isLogin) {
-      if (users[username] === password) {
-        onLogin(username);
-      } else {
-        alert('اسم المستخدم أو كلمة المرور غير صحيحة');
-      }
-    } else {
-      if (users[username]) {
-        alert('اسم المستخدم مستخدم بالفعل');
-      } else {
-        users[username] = password;
-        localStorage.setItem('p2p_users', JSON.stringify(users));
-        onLogin(username);
-      }
-    }
-  };
-
-  return (
-    <div className="flex justify-center bg-[#E5E7EB] min-h-screen rtl font-sans" dir="rtl">
-      <div className="w-full max-w-md bg-white h-screen shadow-2xl flex flex-col justify-center px-8">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-50 text-[#003366] mb-6 shadow-inner border border-blue-100">
-            <ShieldAlert size={40} />
-          </div>
-          <h2 className="text-3xl font-black text-[#003366] mb-2">النقل السريع P2P</h2>
-          <p className="text-gray-500 font-medium">نظام محلي آمن ومستقل بالكامل</p>
-        </div>
-
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-8">
-          <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setIsLogin(true)}
-          >تسجيل دخول</button>
-          <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setIsLogin(false)}
-          >حساب جديد</button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <div className="relative">
-              <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text" value={username} onChange={e => setUsername(e.target.value)}
-                placeholder="اسم المستخدم"
-                className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
-              />
-            </div>
-          </div>
-          <div>
-            <div className="relative">
-              <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="كلمة المرور"
-                className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
-              />
-            </div>
-          </div>
-          <button type="submit" className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-900 transition-colors mt-4">
-            {isLogin ? 'دخول' : 'إنشاء حساب'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function AdminScreen({ currentSettings, onBack, onLogout }: any) {
-  const [appName, setAppName] = useState(currentSettings.appName);
-  const [bannerEnabled, setBannerEnabled] = useState(currentSettings.bannerEnabled);
-  const [bannerText, setBannerText] = useState(currentSettings.bannerText);
-  const [bannerScrolling, setBannerScrolling] = useState(currentSettings.bannerScrolling);
-
-  const handleSave = () => {
-    const newSettings: AppSettings = { appName, bannerEnabled, bannerText, bannerScrolling };
-    localStorage.setItem('p2p_settings', JSON.stringify(newSettings));
-    window.dispatchEvent(new Event('settings_updated'));
-    alert('تم حفظ الإعدادات بنجاح');
-  };
-
-  return (
-    <div className="p-6 space-y-6 animate-in slide-in-from-right-4">
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-[#003366] mb-4 flex items-center gap-2">
-          <Settings2 size={20} /> إعدادات التطبيق
-        </h3>
-        <label className="block text-sm font-bold text-gray-700 mb-2">اسم البرنامج (يظهر في الواجهات)</label>
-        <input 
-          type="text" value={appName} onChange={e => setAppName(e.target.value)}
-          className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#003366] rounded-xl px-4 py-3 font-bold outline-none transition-colors mb-2"
-        />
-      </div>
-
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-bold text-[#003366] flex items-center gap-2">
-            <AlignLeft size={20} /> الشريط الإعلاني
-          </h3>
-          <button 
-            onClick={() => setBannerEnabled(!bannerEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bannerEnabled ? 'bg-[#003366]' : 'bg-gray-300'}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bannerEnabled ? '-translate-x-6' : '-translate-x-1'}`} />
-          </button>
-        </div>
-
-        {bannerEnabled && (
-          <div className="space-y-4 pt-2 animate-in fade-in zoom-in-95">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">نص الشريط</label>
-              <textarea 
-                value={bannerText} onChange={e => setBannerText(e.target.value)}
-                className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#003366] rounded-xl px-4 py-3 font-medium outline-none transition-colors min-h-[80px]"
-                placeholder="أدخل الرسالة هنا..."
-              />
-            </div>
-            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100">
-              <span className="text-sm font-bold text-gray-700">شريط متحرك (Marquee)</span>
-              <button 
-                onClick={() => setBannerScrolling(!bannerScrolling)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bannerScrolling ? 'bg-[#003366]' : 'bg-gray-300'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bannerScrolling ? '-translate-x-6' : '-translate-x-1'}`} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <button onClick={handleSave} className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-blue-900 transition-colors">
-        حفظ الإعدادات
-      </button>
-
-      <button onClick={onLogout} className="w-full bg-red-50 text-red-600 border border-red-100 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors mt-8">
-        <LogOut size={20} /> تسجيل الخروج
-      </button>
-    </div>
-  );
-}
 
 function HomeScreen({ onNavigate }: { onNavigate: (v: 'send'|'receive') => void }) {
   return (
@@ -466,7 +243,7 @@ function HomeScreen({ onNavigate }: { onNavigate: (v: 'send'|'receive') => void 
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-[#003366] mb-4 shadow-inner">
           <Wifi size={32} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800">نقل ملفات</h2>
+        <h2 className="text-2xl font-bold text-gray-800">نقل الملفات عبر المتصفح</h2>
         <p className="text-sm text-gray-500 mt-2">مباشر، آمن، وبدون خوادم وسيطة</p>
       </div>
 
@@ -514,7 +291,7 @@ function SendScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const id = Math.floor(100000 + Math.random() * 900000).toString();
     setPeerId(id);
-    const peer = new Peer(`${APP_PREFIX}${id}`);
+    const peer = new Peer(\`\${APP_PREFIX}\${id}\`);
     peerRef.current = peer;
 
     peer.on('connection', (conn) => {
@@ -616,7 +393,7 @@ function SendScreen({ onBack }: { onBack: () => void }) {
                 <span>{progress}%</span>
               </div>
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: \`\${progress}%\` }} />
               </div>
             </div>
           )}
@@ -657,7 +434,7 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
   const handleConnect = () => {
     if (!targetId || targetId.length !== 6 || !peerRef.current) return;
     setIsConnecting(true);
-    const conn = peerRef.current.connect(`${APP_PREFIX}${targetId}`, { reliable: true });
+    const conn = peerRef.current.connect(\`\${APP_PREFIX}\${targetId}\`, { reliable: true });
     
     conn.on('open', () => {
       setIsConnecting(false);
@@ -757,7 +534,7 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
                 <span>{progress}%</span>
               </div>
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-[#003366] transition-all duration-300 rounded-full" style={{ width: \`\${progress}%\` }} />
               </div>
             </div>
           )}
@@ -835,7 +612,7 @@ function HistoryScreen({ onOpenViewer, onMoveToVault }: any) {
                   </div>
                 )}
               </div>
-              <div className={`p-1 rounded-full ${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}`}>
+              <div className={\`p-1 rounded-full \${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}\`}>
                 {record.isSent ? <Send size={12} /> : <Download size={12} />}
               </div>
             </div>
@@ -894,11 +671,11 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
       const { encrypted, iv, salt } = await encryptData(new TextEncoder().encode('vault_check').buffer, newPass);
       
       for (const record of records) {
-        const vaultedStr = await localforage.getItem<any>(`vault_${record.id}`);
+        const vaultedStr = await localforage.getItem<any>(\`vault_\${record.id}\`);
         if (vaultedStr) {
           const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
           const newEnc = await encryptData(decryptedBuf, newPass);
-          await localforage.setItem(`vault_${record.id}`, newEnc);
+          await localforage.setItem(\`vault_\${record.id}\`, newEnc);
         }
       }
 
@@ -1032,3 +809,5 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
     </div>
   );
 }
+`;
+fs.writeFileSync('src/App.tsx', code);
