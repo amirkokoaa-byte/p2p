@@ -1,0 +1,6 @@
+{
+  "name": "P2P Transfer App Architecture",
+  "description": "Android Native P2P Offline File Transfer Architecture & UI Codes",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
