@@ -193,7 +193,7 @@ const formatTime = (seconds: number | null) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const CHUNK_SIZE = 256 * 1024;
+const CHUNK_SIZE = 4 * 1024 * 1024;
 
 const APP_PREFIX = 'p2ptransfer-app-';
 
