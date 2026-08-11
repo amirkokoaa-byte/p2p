@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { db } from './firebase';
+import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { 
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
@@ -621,6 +623,22 @@ export default function App() {
     };
     init();
     
+    // Listen for Firebase users updates
+    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const cloudUsers: Record<string, UserData> = {};
+      snapshot.forEach(doc => {
+        cloudUsers[doc.id] = doc.data() as UserData;
+      });
+      setUsers(prev => {
+        // Merge cloud users over local users
+        const newUsers = { ...prev };
+        for (const [k, v] of Object.entries(cloudUsers)) {
+          newUsers[k] = { ...newUsers[k], ...v };
+        }
+        return newUsers;
+      });
+    }, (err) => console.error("Firebase Snapshot Error", err));
+
     const loadSettings = () => {
       const stored = localStorage.getItem('p2p_settings');
       if (stored) {
@@ -628,7 +646,10 @@ export default function App() {
       }
     };
     window.addEventListener('settings_updated', loadSettings);
-    return () => window.removeEventListener('settings_updated', loadSettings);
+    return () => {
+      window.removeEventListener('settings_updated', loadSettings);
+      unsubscribe();
+    };
   }, []);
 
   const handleUpdateUser = async (username: string, updates: Partial<UserData>) => {
@@ -639,6 +660,13 @@ export default function App() {
     updatedUsers[username] = { ...updatedUsers[username], ...updates };
     setUsers(updatedUsers);
     await saveUsersData(updatedUsers);
+    
+    // Sync with Firebase
+    try {
+      await setDoc(doc(db, 'users', username), updatedUsers[username], { merge: true });
+    } catch (e) {
+      console.error("Firebase sync error", e);
+    }
   };
 
 
