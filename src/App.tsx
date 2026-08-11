@@ -6,13 +6,6 @@ import {
   User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, Crown, Filter, Sparkles, Minimize, CheckCircle2, Loader2, Save, Check
 } from 'lucide-react';
 
-const formatSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-};
 import Peer, { DataConnection } from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
 import localforage from 'localforage';
@@ -51,21 +44,36 @@ export interface UserData {
 
 const ADMIN_KEY = 'super_secret_anti_cheat_key_2026';
 
+
 async function saveUsersData(users: Record<string, UserData>) {
   try {
     const dataStr = JSON.stringify(users);
     const enc = await encryptData(new TextEncoder().encode(dataStr).buffer, ADMIN_KEY);
-    localStorage.setItem('p2p_users_encrypted', JSON.stringify({
+    const payload = JSON.stringify({
       encrypted: Array.from(new Uint8Array(enc.encrypted)),
       iv: Array.from(enc.iv),
       salt: Array.from(enc.salt)
-    }));
+    });
+    localStorage.setItem('p2p_users_encrypted', payload);
+    await fetch('/api/store', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ key: 'p2p_users_encrypted', value: payload })
+    });
   } catch (e) { console.error(e); }
 }
 
 async function loadUsersData(): Promise<Record<string, UserData>> {
   try {
-    const checkStr = localStorage.getItem('p2p_users_encrypted');
+    let checkStr = null;
+    try {
+      const res = await fetch('/api/load/p2p_users_encrypted');
+      const data = await res.json();
+      if (data.value) checkStr = data.value;
+    } catch(e) {}
+    if (!checkStr) {
+      checkStr = localStorage.getItem('p2p_users_encrypted');
+    }
     if (!checkStr) return {};
     const { encrypted, iv, salt } = JSON.parse(checkStr);
     const decrypted = await decryptData(
@@ -76,6 +84,40 @@ async function loadUsersData(): Promise<Record<string, UserData>> {
     return {};
   }
 }
+
+async function loadAuthUsers(): Promise<Record<string, string>> {
+  try {
+    const res = await fetch('/api/load/p2p_auth_users');
+    const data = await res.json();
+    if (data.value) {
+      const { encrypted, iv, salt } = JSON.parse(data.value);
+      const decrypted = await decryptData(
+        new Uint8Array(encrypted).buffer, new Uint8Array(iv), new Uint8Array(salt), ADMIN_KEY
+      );
+      return JSON.parse(new TextDecoder().decode(decrypted));
+    }
+  } catch (e) { }
+  return JSON.parse(localStorage.getItem('p2p_users') || '{}');
+}
+
+async function saveAuthUsers(users: Record<string, string>) {
+  localStorage.setItem('p2p_users', JSON.stringify(users));
+  try {
+    const dataStr = JSON.stringify(users);
+    const enc = await encryptData(new TextEncoder().encode(dataStr).buffer, ADMIN_KEY);
+    const payload = JSON.stringify({
+      encrypted: Array.from(new Uint8Array(enc.encrypted)),
+      iv: Array.from(enc.iv),
+      salt: Array.from(enc.salt)
+    });
+    await fetch('/api/store', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ key: 'p2p_auth_users', value: payload })
+    });
+  } catch (e) { console.error(e); }
+}
+
 
 // --- Crypto Helpers (AES-256 GCM) ---
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
@@ -102,8 +144,25 @@ async function decryptData(encrypted: ArrayBuffer, iv: Uint8Array, salt: Uint8Ar
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, encrypted);
 }
 
+
 // --- Helpers ---
+const formatSize = (bytes: number) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+const formatTime = (seconds: number | null) => {
+  if (seconds === null || !isFinite(seconds)) return '--:--';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 const CHUNK_SIZE = 256 * 1024;
+
 const APP_PREFIX = 'p2ptransfer-app-';
 
 const saveToHistory = (record: Omit<TransferRecord, 'id' | 'timestamp'>) => {
@@ -1238,13 +1297,6 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
     return <FileIcon className="text-[#003366]" size={18} />;
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
 
   return (
     <div className="p-6 flex flex-col h-full bg-[#F8F9FA] overflow-y-auto pb-24">
@@ -1324,6 +1376,7 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
     </div>
   );
 }
+
 
 function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, userData, onLimitExceeded }: any) {
   const [peerId, setPeerId] = useState<string>('');
@@ -1410,13 +1463,11 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
     let allowedImages = settings?.freeImagesLimit || 20;
     let allowedVideos = settings?.freeVideosLimit || 4;
     
-    
     const isPremium = userData?.isPremium;
     if (isPremium || currentUser === 'admin') {
       allowedImages = Infinity;
       allowedVideos = Infinity;
     }
-
 
     const imageCount = files.filter(f => f.type.startsWith('image/')).length;
     const videoCount = files.filter(f => f.type.startsWith('video/')).length;
@@ -1476,13 +1527,10 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
                          <FileText size={24} />
                        </div>
                        <div className="flex flex-col items-start min-w-0 flex-1">
-                          <span className="truncate w-full font-bold text-sm text-gray-800 text-right" dir="ltr">{resendFile.name}</span>
+                          <span className="font-bold text-sm text-[#003366] truncate w-full text-right" dir="ltr">{resendFile.name}</span>
                           <span className="text-xs text-gray-500">{formatSize(resendFile.size)}</span>
                        </div>
                      </div>
-                     <button onClick={onClearResend} className="p-2 text-red-400 hover:text-red-600 bg-white rounded-full hover:bg-red-50 transition-colors shadow-sm shrink-0">
-                       <X size={20} />
-                     </button>
                    </div>
                    <button 
                      onClick={() => startTransfers([{blob: resendFile.blob, name: resendFile.name, mime: resendFile.mime, size: resendFile.size}])}
@@ -1535,6 +1583,7 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
     </div>
   );
 }
+
 
 function ReceiveScreen({ onBack }: { onBack: () => void }) {
   const [targetId, setTargetId] = useState('');
