@@ -1,7 +1,0 @@
---- src/App.tsx
-+++ src/App.tsx
-@@ -10,3 +10,3 @@
-   UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole,
--  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon
-+  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, Crown
- } from 'lucide-react';

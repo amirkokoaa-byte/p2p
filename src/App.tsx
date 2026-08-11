@@ -3,7 +3,7 @@ import {
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
   UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole,
-  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, Crown, Filter, Sparkles, Minimize, CheckCircle2, Loader2, Save, Check
+  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, Crown, Filter, Sparkles, Minimize, Save, Check, ExternalLink, Star
 } from 'lucide-react';
 
 import Peer, { DataConnection } from 'peerjs';
@@ -15,6 +15,14 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
 // --- Types ---
+
+interface SuggestedApp {
+  id: string;
+  name: string;
+  url: string;
+  imageUri: string;
+}
+
 interface TransferRecord {
   id: string;
   name: string;
@@ -144,6 +152,30 @@ async function decryptData(encrypted: ArrayBuffer, iv: Uint8Array, salt: Uint8Ar
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, encrypted);
 }
 
+
+
+function FileThumbnail({ recordId }: { recordId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  
+  useEffect(() => {
+    let objectUrl = '';
+    localforage.getItem<Blob>(recordId).then(blob => {
+      if (blob) {
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      }
+    });
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [recordId]);
+
+  if (!url) return <div className="w-12 h-12 bg-gray-100 rounded-xl animate-pulse shrink-0" />;
+  
+  return (
+    <img src={url} alt="Thumbnail" className="w-12 h-12 object-cover rounded-xl shadow-sm shrink-0 border border-gray-100" />
+  );
+}
 
 // --- Helpers ---
 const formatSize = (bytes: number) => {
@@ -550,8 +582,8 @@ function CompressScreen({ getHistory, onOpenViewer }: any) {
 
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin' | 'premium'>('auth');
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin' | 'premium' | 'filter' | 'compress' | 'suggested'>(localStorage.getItem('p2p_session') ? 'home' : 'auth');
+  const [currentUser, setCurrentUser] = useState<string | null>(localStorage.getItem('p2p_session') || null);
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [users, setUsers] = useState<Record<string, UserData>>({});
   
@@ -668,6 +700,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('p2p_session');
     setCurrentUser(null);
     setCurrentView('auth');
     setVaultPassword(null);
@@ -756,17 +789,19 @@ export default function App() {
           {currentView === 'admin' && <AdminScreen currentSettings={settings} onBack={() => setCurrentView('home')} onLogout={handleLogout} users={users} onUpdateUser={handleUpdateUser} onUpdateSettings={setSettings} />}
           {currentView === 'premium' && <PremiumScreen onBack={() => setCurrentView('home')} />}
           {currentView === 'filter' && <FilterScreen />}
+          {currentView === 'suggested' && <SuggestedAppsScreen />}
           {currentView === 'compress' && <CompressScreen getHistory={getHistory} onOpenViewer={setViewingFile} />}
         </main>
 
         {/* Bottom Navigation */}
-        {['home', 'history', 'vault', 'filter', 'compress'].includes(currentView) && (
+        {['home', 'history', 'vault', 'filter', 'compress', 'suggested'].includes(currentView) && (
           <nav className="absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around p-2 z-10 pb-5 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
             <NavItem view="home" current={currentView} icon={<Home size={22} />} label="الرئيسية" onClick={() => setCurrentView('home')} />
             <NavItem view="history" current={currentView} icon={<History size={22} />} label="السجل" onClick={() => setCurrentView('history')} />
             <NavItem view="vault" current={currentView} icon={<LockKeyhole size={22} />} label="المحفظة" onClick={() => setCurrentView('vault')} />
             <NavItem view="compress" current={currentView} icon={<Minimize size={22} />} label="ضغط" onClick={() => setCurrentView('compress')} />
             <NavItem view="filter" current={currentView} icon={<Filter size={22} />} label="فلترة" onClick={() => setCurrentView('filter')} />
+            <NavItem view="suggested" current={currentView} icon={<Star size={22} />} label="مقترحة" onClick={() => setCurrentView('suggested')} />
           </nav>
         )}
       </div>
@@ -775,6 +810,30 @@ export default function App() {
         <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
       )}
       
+
+      {showPremiumWelcome && currentUser && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-amber-400 to-amber-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <Crown size={32} />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">أهلاً بك في الباقة المميزة!</h3>
+                <p className="text-gray-600 font-medium text-sm mb-6 leading-relaxed">
+                  تم شراء الباقة بنجاح ({users[currentUser]?.premiumExpiryDate === null ? 'مدى الحياة' : (users[currentUser]?.premiumExpiryDate! - Date.now() > 300*24*60*60*1000 ? 'سنوية' : 'شهرية')}).<br/>
+                  تم أخذ الصلاحيات كاملة وغير محدودة.
+                </p>
+                <button 
+                  onClick={() => setShowPremiumWelcome(false)}
+                  className="w-full bg-[#003366] text-white hover:bg-blue-900 py-3.5 rounded-xl font-bold transition-colors shadow-md"
+                >
+                  استمرار
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes marquee {
           0% { transform: translateX(-100%); }
@@ -801,13 +860,21 @@ function AuthScreen({ onLogin }: { onLogin: (username: string) => void }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) return alert('الرجاء إدخال اسم المستخدم وكلمة المرور');
 
+    const handleSuccess = () => {
+      if (rememberMe) {
+        localStorage.setItem('p2p_session', username);
+      }
+      onLogin(username);
+    };
+
     if (username === 'admin' && password === 'admin') {
-      onLogin('admin');
+      handleSuccess();
       return;
     }
 
@@ -815,7 +882,7 @@ function AuthScreen({ onLogin }: { onLogin: (username: string) => void }) {
     
     if (isLogin) {
       if (users[username] === password) {
-        onLogin(username);
+        handleSuccess();
       } else {
         alert('اسم المستخدم أو كلمة المرور غير صحيحة');
       }
@@ -825,63 +892,143 @@ function AuthScreen({ onLogin }: { onLogin: (username: string) => void }) {
       } else {
         users[username] = password;
         localStorage.setItem('p2p_users', JSON.stringify(users));
-        onLogin(username);
+        handleSuccess();
       }
     }
   };
 
   return (
     <div className="flex justify-center bg-[#E5E7EB] min-h-screen rtl font-sans" dir="rtl">
-      <div className="w-full max-w-md bg-white h-screen shadow-2xl flex flex-col justify-center px-8">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-50 text-[#003366] mb-6 shadow-inner border border-blue-100">
-            <ShieldAlert size={40} />
-          </div>
-          <h2 className="text-3xl font-black text-[#003366] mb-2">النقل السريع P2P</h2>
-          <p className="text-gray-500 font-medium">نظام محلي آمن ومستقل بالكامل</p>
-        </div>
-
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-8">
-          <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setIsLogin(true)}
-          >تسجيل دخول</button>
-          <button 
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            onClick={() => setIsLogin(false)}
-          >حساب جديد</button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <div className="relative">
-              <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text" value={username} onChange={e => setUsername(e.target.value)}
-                placeholder="اسم المستخدم"
-                className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
-              />
+      <div className="w-full max-w-md bg-white min-h-screen shadow-2xl flex flex-col px-8 relative">
+        <div className="flex-1 flex flex-col justify-center">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-50 text-[#003366] mb-6 shadow-inner border border-blue-100">
+              <ShieldAlert size={40} />
             </div>
+            <h2 className="text-3xl font-black text-[#003366] mb-2">النقل السريع P2P</h2>
+            <p className="text-gray-500 font-medium">نظام محلي آمن ومستقل بالكامل</p>
           </div>
-          <div>
-            <div className="relative">
-              <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="كلمة المرور"
-                className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
-              />
+
+          <div className="flex bg-gray-100 rounded-xl p-1 mb-8">
+            <button 
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setIsLogin(true)}
+            >تسجيل دخول</button>
+            <button 
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-[#003366] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setIsLogin(false)}
+            >حساب جديد</button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <div className="relative">
+                <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input 
+                  type="text" value={username} onChange={e => setUsername(e.target.value)}
+                  placeholder="اسم المستخدم"
+                  className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
+                />
+              </div>
             </div>
-          </div>
-          <button type="submit" className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-900 transition-colors mt-4">
-            {isLogin ? 'دخول' : 'إنشاء حساب'}
-          </button>
-        </form>
+            <div>
+              <div className="relative">
+                <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input 
+                  type="password" value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder="كلمة المرور"
+                  className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-100 focus:bg-white rounded-xl pr-12 pl-4 py-4 font-bold text-gray-800 outline-none transition-all"
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 mt-2">
+              <input 
+                type="checkbox" 
+                id="rememberMe" 
+                checked={rememberMe} 
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 text-[#003366] bg-gray-100 border-gray-300 rounded focus:ring-[#003366]"
+              />
+              <label htmlFor="rememberMe" className="text-sm text-gray-600 font-medium cursor-pointer">
+                حفظ البيانات
+              </label>
+            </div>
+
+            <button type="submit" className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-900 transition-colors mt-4">
+              {isLogin ? 'دخول' : 'إنشاء حساب'}
+            </button>
+          </form>
+        </div>
+        
+        <div className="py-6 text-center text-sm font-medium text-gray-500">
+          مع تحيات المبرمج Amir Lamay.
+        </div>
       </div>
     </div>
   );
 }
 
+
+
+function SuggestedAppsScreen() {
+  const [apps, setApps] = useState<SuggestedApp[]>([]);
+
+  useEffect(() => {
+    const loadedApps = JSON.parse(localStorage.getItem('p2p_suggested_apps') || '[]');
+    setApps(loadedApps);
+  }, []);
+
+  const handleOpenLink = (url: string) => {
+    // Basic formatting for urls to ensure they work
+    let finalUrl = url;
+    if (!/^https?:\/\//i.test(url)) {
+      finalUrl = 'https://' + url;
+    }
+    window.open(finalUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div className="p-6 pb-24 animate-in slide-in-from-right-4">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 bg-purple-50 text-purple-600 rounded-xl shadow-sm">
+          <Sparkles size={24} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-gray-800">برامج مقترحة</h2>
+          <p className="text-sm font-medium text-gray-500 mt-1">تطبيقات ومواقع نوصي بها</p>
+        </div>
+      </div>
+
+      {apps.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm text-center px-6">
+          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+            <Star size={32} className="text-gray-300" />
+          </div>
+          <p className="text-gray-500 font-bold mb-2">لا توجد برامج مقترحة حالياً</p>
+          <p className="text-sm text-gray-400">تابعنا قريباً لاكتشاف أفضل البرامج</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {apps.map(app => (
+            <div key={app.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <img src={app.imageUri} alt={app.name} className="w-16 h-16 object-cover rounded-2xl shadow-sm shrink-0 bg-gray-50 border border-gray-100" />
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <h3 className="font-bold text-gray-800 truncate mb-1">{app.name}</h3>
+                <button 
+                  onClick={() => handleOpenLink(app.url)}
+                  className="text-blue-600 text-sm font-bold flex items-center gap-1 hover:underline self-start bg-blue-50 px-2 py-1 rounded-md"
+                >
+                  اضغط هنا <ExternalLink size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FilterScreen() {
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
@@ -1149,7 +1296,56 @@ function PremiumScreen({ onBack }: { onBack: () => void }) {
 
 
 function AdminScreen({ currentSettings, onBack, onLogout, users, onUpdateUser, onUpdateSettings }: any) {
+  
   const [appName, setAppName] = useState(currentSettings.appName);
+  
+  // Suggested Apps
+  const [suggestedApps, setSuggestedApps] = useState<SuggestedApp[]>([]);
+  const [newAppName, setNewAppName] = useState('');
+  const [newAppUrl, setNewAppUrl] = useState('');
+  const [newAppImage, setNewAppImage] = useState('');
+
+  useEffect(() => {
+    const apps = JSON.parse(localStorage.getItem('p2p_suggested_apps') || '[]');
+    setSuggestedApps(apps);
+  }, []);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewAppImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddApp = () => {
+    if (!newAppName || !newAppUrl || !newAppImage) {
+      return alert('الرجاء إدخال اسم البرنامج، والرابط، واختيار صورة');
+    }
+    const newApp: SuggestedApp = {
+      id: Date.now().toString(),
+      name: newAppName,
+      url: newAppUrl,
+      imageUri: newAppImage
+    };
+    const updated = [...suggestedApps, newApp];
+    setSuggestedApps(updated);
+    localStorage.setItem('p2p_suggested_apps', JSON.stringify(updated));
+    setNewAppName('');
+    setNewAppUrl('');
+    setNewAppImage('');
+    alert('تمت إضافة البرنامج بنجاح');
+  };
+
+  const handleDeleteApp = (id: string) => {
+    const updated = suggestedApps.filter(app => app.id !== id);
+    setSuggestedApps(updated);
+    localStorage.setItem('p2p_suggested_apps', JSON.stringify(updated));
+  };
+
   const [bannerEnabled, setBannerEnabled] = useState(currentSettings.bannerEnabled);
   const [bannerText, setBannerText] = useState(currentSettings.bannerText);
   const [bannerScrolling, setBannerScrolling] = useState(currentSettings.bannerScrolling);
@@ -1223,9 +1419,63 @@ function AdminScreen({ currentSettings, onBack, onLogout, users, onUpdateUser, o
             </div>
           </div>
         )}
+      
       </div>
 
-      <button onClick={handleSave} className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-blue-900 transition-colors">
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
+        <h3 className="text-lg font-bold text-[#003366] flex items-center gap-2">
+          <Star size={20} /> برامج مقترحة من المطور
+        </h3>
+        
+        <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">اسم البرنامج/الموقع</label>
+            <input 
+              type="text" value={newAppName} onChange={e => setNewAppName(e.target.value)}
+              className="w-full bg-white border border-gray-200 focus:border-[#003366] rounded-lg px-3 py-2 text-sm font-bold outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">رابط الموقع</label>
+            <input 
+              type="url" value={newAppUrl} onChange={e => setNewAppUrl(e.target.value)} dir="ltr"
+              className="w-full bg-white border border-gray-200 focus:border-[#003366] rounded-lg px-3 py-2 text-sm text-left outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">صورة البرنامج</label>
+            <input 
+              type="file" accept="image/*" onChange={handleImageSelect}
+              className="w-full text-sm text-gray-500 file:mr-0 file:ml-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[#003366] hover:file:bg-blue-100"
+            />
+            {newAppImage && <img src={newAppImage} alt="Preview" className="mt-2 w-16 h-16 object-cover rounded-xl shadow-sm" />}
+          </div>
+          <button onClick={handleAddApp} className="w-full bg-[#003366] text-white py-2.5 rounded-lg font-bold text-sm shadow-md hover:bg-blue-900 transition-colors mt-2">
+            ارفع
+          </button>
+        </div>
+
+        {suggestedApps.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <label className="block text-xs font-bold text-gray-700 mb-2">البرامج المضافة:</label>
+            {suggestedApps.map(app => (
+              <div key={app.id} className="flex items-center gap-3 bg-white border border-gray-100 p-2 rounded-xl shadow-sm">
+                <img src={app.imageUri} alt={app.name} className="w-10 h-10 object-cover rounded-lg" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-800 truncate">{app.name}</p>
+                  <p className="text-xs text-gray-500 truncate" dir="ltr">{app.url}</p>
+                </div>
+                <button onClick={() => handleDeleteApp(app.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={handleSave}
+ className="w-full bg-[#003366] text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-blue-900 transition-colors">
         حفظ الإعدادات
       </button>
       
@@ -2204,28 +2454,7 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
         ))
       )}
 
-      {showPremiumWelcome && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
-           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="p-6 text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-amber-400 to-amber-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                  <Crown size={32} />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">أهلاً بك في الباقة المميزة!</h3>
-                <p className="text-gray-600 font-medium text-sm mb-6 leading-relaxed">
-                  تم شراء الباقة بنجاح ({users[currentUser!]?.premiumExpiryDate === null ? 'مدى الحياة' : (users[currentUser!]?.premiumExpiryDate! - Date.now() > 300*24*60*60*1000 ? 'سنوية' : 'شهرية')}).<br/>
-                  تم أخذ الصلاحيات كاملة وغير محدودة.
-                </p>
-                <button 
-                  onClick={() => setShowPremiumWelcome(false)}
-                  className="w-full bg-[#003366] text-white hover:bg-blue-900 py-3.5 rounded-xl font-bold transition-colors shadow-md"
-                >
-                  استمرار
-                </button>
-              </div>
-           </div>
-        </div>
-      )}
+      
     </div>
   );
 }
