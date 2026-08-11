@@ -5,7 +5,7 @@ import {
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
   UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole,
-  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, Crown, Filter, Sparkles, Minimize, Save, Check, ExternalLink, Star
+  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, FolderOpen, Crown, Filter, Sparkles, Minimize, Save, Check, ExternalLink, Star
 } from 'lucide-react';
 
 import Peer, { DataConnection } from 'peerjs';
@@ -28,6 +28,7 @@ interface SuggestedApp {
 interface TransferRecord {
   id: string;
   name: string;
+  originalName?: string;
   size: number;
   timestamp: number;
   isSent: boolean;
@@ -688,16 +689,36 @@ export default function App() {
          return;
       }
       const arrayBuffer = await fileBlob.arrayBuffer();
+      // تشفير البيانات بالكامل (Byte Stream)
       const { encrypted, iv, salt } = await encryptData(arrayBuffer, vaultPassword);
       
       await localforage.setItem(`vault_${record.id}`, { encrypted, iv, salt });
       await localforage.removeItem(record.id);
       
       const history = getHistory();
-      const updated = history.map(r => r.id === record.id ? { ...r, vaulted: true } : r);
+      // تغيير الامتداد إلى امتداد مجهول
+      const updatedName = record.name.replace(/\.[^/.]+$/, "") + ".p2p";
+      const updated = history.map(r => r.id === record.id ? { ...r, vaulted: true, name: updatedName, originalName: record.name } : r);
       localStorage.setItem('p2p_history', JSON.stringify(updated));
       window.dispatchEvent(new Event('history_updated'));
-      alert('تم تشفير الملف ونقله إلى المحفظة بنجاح.');
+
+      // تعطيل ترويسة الملف وإنشاء ملف مشوه هيكلياً لتحميله إلى الهاتف
+      const fakeHeader = new TextEncoder().encode("P2P_SECURE_VAULT_FILE_NO_MEDIA\n\n");
+      const scrambledStream = new Uint8Array(fakeHeader.length + encrypted.byteLength);
+      scrambledStream.set(fakeHeader, 0);
+      scrambledStream.set(new Uint8Array(encrypted), fakeHeader.length);
+
+      const downloadBlob = new Blob([scrambledStream], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(downloadBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `p2p/المحفظة/${updatedName}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      alert('تم تشفير الملف ونقله إلى المحفظة بنجاح. تم حفظ النسخة المشفرة في مدير الملفات، يرجى حذف النسخة الأصلية يدوياً لضمان السرية.');
     } catch (e) {
       console.error(e);
       alert('حدث خطأ أثناء التشفير.');
@@ -715,11 +736,11 @@ export default function App() {
         if (!vaultedStr) return alert('الملف غير موجود.');
         const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
         const blob = new Blob([decryptedBuf], { type: record.mime });
-        setViewingFile({ blob, name: record.name, type: record.type });
+        setViewingFile({ blob, name: record.originalName || record.name, type: record.type });
       } else {
         const fileBlob = await localforage.getItem<Blob>(record.id);
         if (!fileBlob) return alert('الملف غير متوفر محلياً للعرض. قد يكون تم حذفه من التخزين المؤقت للمتصفح.');
-        setViewingFile({ blob: fileBlob, name: record.name, type: record.type });
+        setViewingFile({ blob: fileBlob, name: record.originalName || record.name, type: record.type });
       }
     } catch (e) {
       console.error(e);
@@ -1668,6 +1689,7 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
   const peerRef = useRef<Peer | null>(null);
   const onAckRef = useRef<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const connectionRef = useRef<DataConnection | null>(null);
 
   useEffect(() => {
     const id = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1676,13 +1698,31 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
     peerRef.current = peer;
     peer.on('connection', (conn) => {
       setConnection(conn);
+      connectionRef.current = conn;
       conn.on('data', (msg: any) => {
+        if (msg.type === 'disconnect') {
+           alert('تم قطع الاتصال من الطرف الآخر');
+           onBack();
+           return;
+        }
         if (msg.type === 'ack' && onAckRef.current) {
           onAckRef.current();
         }
       });
     });
-    return () => { peer.destroy(); };
+
+    const handleBeforeUnload = () => {
+      if (connectionRef.current) {
+        connectionRef.current.send({ type: 'disconnect' });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => { 
+      handleBeforeUnload();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      peer.destroy(); 
+    };
   }, []);
 
   const startTransfers = (items: {blob: Blob|File, name: string, mime: string, size: number}[]) => {
@@ -1878,18 +1918,31 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
   const [eta, setEta] = useState<number | null>(null);
   const speedRef = useRef({ lastBytes: 0, lastTime: 0 });
 
-
   const peerRef = useRef<Peer | null>(null);
+  const connectionRef = useRef<DataConnection | null>(null);
 
   useEffect(() => {
     peerRef.current = new Peer();
-    return () => { if (peerRef.current) peerRef.current.destroy(); };
+    
+    const handleBeforeUnload = () => {
+      if (connectionRef.current) {
+        connectionRef.current.send({ type: 'disconnect' });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => { 
+      handleBeforeUnload();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (peerRef.current) peerRef.current.destroy(); 
+    };
   }, []);
 
   const handleConnect = () => {
     if (!targetId || targetId.length !== 6 || !peerRef.current) return;
     setIsConnecting(true);
     const conn = peerRef.current.connect(`${APP_PREFIX}${targetId}`, { reliable: true });
+    connectionRef.current = conn;
     
     conn.on('open', () => {
       setIsConnecting(false);
@@ -1916,6 +1969,11 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
     let fileMeta: any = null;
 
     conn.on('data', (msg: any) => {
+      if (msg.type === 'disconnect') {
+        alert('تم قطع الاتصال من الطرف الآخر');
+        onBack();
+        return;
+      }
       if (msg.type === 'header') {
         setIsTransferring(true);
         setTransferSuccess(false);
@@ -1953,7 +2011,14 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = fileMeta.name;
+        
+        let folderName = 'ملفات';
+        if (fileMeta.mime.startsWith('image/')) folderName = 'صور';
+        else if (fileMeta.mime.startsWith('video/')) folderName = 'فديو';
+        else if (fileMeta.mime.startsWith('audio/')) folderName = 'صوتيات';
+        
+        a.download = `p2p/${folderName}/${fileMeta.name}`;
+        
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -2035,6 +2100,14 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
               <div className="text-green-600 font-bold flex items-center gap-2 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
                 <CheckCircle2 size={20} /> اكتمل التحميل! تم تنزيل الملف وحفظه.
               </div>
+              <button 
+                onClick={() => {
+                  window.location.href = "intent://downloads#Intent;scheme=content;type=*/*;action=android.intent.action.VIEW;end;";
+                }}
+                className="w-full bg-gray-100 text-[#003366] font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <FolderOpen size={20} /> مكان الحفظ
+              </button>
             </div>
           )}
         </div>
