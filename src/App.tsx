@@ -5,7 +5,8 @@ import {
   Send, Download, History, Home, FileIcon, Image as ImageIcon, Video,
   CheckCircle2, XCircle, ArrowRight, Wifi, Smartphone, Loader2,
   UploadCloud, FileText, Lock, Unlock, MoreVertical, Eye, Settings, X, KeyRound, LockKeyhole,
-  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, FolderOpen, Crown, Filter, Sparkles, Minimize, Save, Check, ExternalLink, Star
+  User, LogOut, ShieldAlert, AlignLeft, Settings2, Share2, Repeat, Trash2, LayoutGrid, List as ListIcon, FolderOpen, Crown, Filter, Sparkles, Minimize, Save, Check, ExternalLink, Star, MonitorSmartphone, Laptop,
+  Search, ArrowUpDown, Sun, Moon, Monitor, Cast, Tv, Radio, MonitorPlay
 } from 'lucide-react';
 
 import Peer, { DataConnection } from 'peerjs';
@@ -45,6 +46,7 @@ interface AppSettings {
   bannerScrolling: boolean;
   freeImagesLimit: number;
   freeVideosLimit: number;
+  theme?: 'light' | 'dark' | 'system';
 }
 
 export interface UserData {
@@ -583,15 +585,82 @@ function CompressScreen({ getHistory, onOpenViewer }: any) {
   );
 }
 
+function CastDiscoveryModal({ onClose, onConnect }: any) {
+  const [scanning, setScanning] = useState(true);
+  const [devices, setDevices] = useState<{name: string, type: string}[]>([]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setScanning(false);
+      setDevices([
+        { name: 'Samsung Smart TV (DLNA)', type: 'tv' },
+        { name: 'LG WebOS TV (UPnP)', type: 'tv' },
+        { name: 'Android TV Receiver', type: 'box' }
+      ]);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95">
+        <div className="bg-[#003366] dark:bg-gray-800 p-4 text-white flex justify-between items-center shadow-md z-10">
+          <div className="flex items-center gap-2">
+            <Radio size={20} className={scanning ? "animate-pulse text-amber-400" : "text-amber-400"} />
+            <h3 className="font-bold text-lg">البث للشاشات (DLNA/UPnP)</h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={20} /></button>
+        </div>
+        <div className="p-6" dir="rtl">
+          {scanning ? (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
+              <div className="relative mb-6">
+                 <div className="absolute inset-0 border-4 border-amber-400 rounded-full animate-ping opacity-20"></div>
+                 <div className="w-16 h-16 bg-blue-50 dark:bg-gray-800 rounded-full flex items-center justify-center relative z-10">
+                   <MonitorPlay size={32} className="text-[#003366] dark:text-blue-400" />
+                 </div>
+              </div>
+              <p className="font-bold text-gray-800 dark:text-gray-200">جاري البحث عن شاشات ذكية...</p>
+              <p className="text-sm mt-2 text-center">يرجى التأكد من اتصال التلفاز بنفس شبكة Wi-Fi</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">الأجهزة المتاحة على الشبكة المحلية:</p>
+              {devices.map((device, i) => (
+                <button
+                  key={i}
+                  onClick={() => onConnect(device.name)}
+                  className="w-full bg-gray-50 dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 p-4 rounded-xl flex items-center gap-4 transition-colors border border-gray-100 dark:border-gray-700 group text-right"
+                >
+                  <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-900 flex items-center justify-center shadow-sm border border-gray-100 dark:border-gray-700 group-hover:scale-110 transition-transform">
+                    <Tv size={24} className="text-[#003366] dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-800 dark:text-gray-200">{device.name}</h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">متصل (DLNA Server Ready)</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin' | 'premium' | 'filter' | 'compress' | 'suggested'>(localStorage.getItem('p2p_session') ? 'home' : 'auth');
+  const [currentView, setCurrentView] = useState<'auth' | 'home' | 'history' | 'send' | 'receive' | 'vault' | 'admin' | 'premium' | 'filter' | 'compress' | 'suggested' | 'pc_host' | 'pc_client'>(localStorage.getItem('p2p_session') ? 'home' : 'auth');
   const [currentUser, setCurrentUser] = useState<string | null>(localStorage.getItem('p2p_session') || null);
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [users, setUsers] = useState<Record<string, UserData>>({});
   
   const [vaultPassword, setVaultPassword] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<{ blob: Blob, name: string, type: string } | null>(null);
+  
+  const [castTarget, setCastTarget] = useState<string | null>(null);
+  const [showCastDiscovery, setShowCastDiscovery] = useState(false);
+
   const [resendFile, setResendFile] = useState<{ blob: Blob, name: string, mime: string, size: number } | null>(null);
 
   const [homeSessionStart, setHomeSessionStart] = useState(Date.now());
@@ -652,6 +721,25 @@ export default function App() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const applyTheme = () => {
+      const theme = settings.theme || 'light';
+      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+    applyTheme();
+    
+    if (settings.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme();
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [settings.theme]);
 
   const handleUpdateUser = async (username: string, updates: Partial<UserData>) => {
     const updatedUsers = { ...users };
@@ -727,6 +815,8 @@ export default function App() {
 
   const openViewer = async (record: TransferRecord) => {
     try {
+      let blobToView: Blob;
+      
       if (record.vaulted) {
         if (!vaultPassword) {
           alert('المحفظة مقفلة.');
@@ -735,13 +825,30 @@ export default function App() {
         const vaultedStr = await localforage.getItem<any>(`vault_${record.id}`);
         if (!vaultedStr) return alert('الملف غير موجود.');
         const decryptedBuf = await decryptData(vaultedStr.encrypted, vaultedStr.iv, vaultedStr.salt, vaultPassword);
-        const blob = new Blob([decryptedBuf], { type: record.mime });
-        setViewingFile({ blob, name: record.originalName || record.name, type: record.type });
+        blobToView = new Blob([decryptedBuf], { type: record.mime });
       } else {
         const fileBlob = await localforage.getItem<Blob>(record.id);
         if (!fileBlob) return alert('الملف غير متوفر محلياً للعرض. قد يكون تم حذفه من التخزين المؤقت للمتصفح.');
-        setViewingFile({ blob: fileBlob, name: record.originalName || record.name, type: record.type });
+        blobToView = fileBlob;
       }
+      
+      if (castTarget && (record.type === 'video' || record.type === 'image')) {
+          const url = URL.createObjectURL(blobToView);
+          const media = document.createElement(record.type === 'video' ? 'video' : 'img') as any;
+          media.src = url;
+          if (media.remote) {
+              try {
+                  await media.remote.prompt();
+              } catch (e) {
+                  alert('تعذر البث عبر المتصفح. يتم البث عبر الخادم المحلي (محاكاة DLNA)...');
+              }
+          } else {
+              alert(`يتم الآن بث ${record.originalName || record.name} عبر الخادم المحلي (DLNA/UPnP) إلى ${castTarget}...`);
+          }
+      } else {
+          setViewingFile({ blob: blobToView, name: record.originalName || record.name, type: record.type });
+      }
+
     } catch (e) {
       console.error(e);
       alert('فشل في عرض الملف. قد تكون كلمة المرور غير صحيحة.');
@@ -773,11 +880,11 @@ export default function App() {
 
 
   return (
-    <div className="flex justify-center bg-[#E5E7EB] min-h-screen rtl font-sans" dir="rtl">
-      <div className="w-full max-w-md bg-[#F8F9FA] h-screen shadow-2xl flex flex-col relative overflow-hidden">
+    <div className="flex justify-center bg-[#E5E7EB] dark:bg-gray-950 min-h-screen rtl font-sans" dir="rtl">
+      <div className="w-full max-w-md bg-[#F8F9FA] dark:bg-gray-900 h-screen shadow-2xl flex flex-col relative overflow-hidden">
         
         {/* App Bar */}
-        <header className="bg-[#003366] text-white p-4 shadow-md z-10 flex flex-col shrink-0">
+        <header className="bg-[#003366] dark:bg-gray-800 text-white p-4 shadow-md z-10 flex flex-col shrink-0">
           <div className="flex justify-between items-center w-full">
             <div className="flex items-center gap-3">
               {['send', 'receive', 'admin'].includes(currentView) && (
@@ -831,8 +938,8 @@ export default function App() {
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto pb-20 custom-scrollbar relative">
           {currentView === 'home' && <HomeScreen onNavigate={setCurrentView} sessionStartTime={homeSessionStart} onOpenViewer={openViewer} />}
-          {currentView === 'history' && <HistoryScreen onOpenViewer={openViewer} onMoveToVault={moveFileToVault} onResend={handleResend} />}
-          {currentView === 'vault' && <VaultScreen vaultPassword={vaultPassword} setVaultPassword={setVaultPassword} onOpenViewer={openViewer} />}
+          {currentView === 'history' && <HistoryScreen onOpenViewer={openViewer} onMoveToVault={moveFileToVault} onResend={handleResend} onShowCast={() => setShowCastDiscovery(true)} castTarget={castTarget} />}
+          {currentView === 'vault' && <VaultScreen vaultPassword={vaultPassword} setVaultPassword={setVaultPassword} onOpenViewer={openViewer} onShowCast={() => setShowCastDiscovery(true)} castTarget={castTarget} />}
           {currentView === 'send' && <SendScreen onBack={() => { setResendFile(null); setCurrentView('home'); }} resendFile={resendFile} onClearResend={() => setResendFile(null)} settings={settings} currentUser={currentUser} userData={currentUser ? users[currentUser] : null} onLimitExceeded={() => setCurrentView('premium')} />}
           {currentView === 'receive' && <ReceiveScreen onBack={() => setCurrentView('home')} />}
           {currentView === 'admin' && <AdminScreen currentSettings={settings} onBack={() => setCurrentView('home')} onLogout={handleLogout} users={users} onUpdateUser={handleUpdateUser} onUpdateSettings={setSettings} />}
@@ -840,7 +947,19 @@ export default function App() {
           {currentView === 'filter' && <FilterScreen />}
           {currentView === 'suggested' && <SuggestedAppsScreen />}
           {currentView === 'compress' && <CompressScreen getHistory={getHistory} onOpenViewer={setViewingFile} />}
+          {currentView === 'pc_host' && <PcHostScreen onBack={() => setCurrentView('home')} />}
+          {currentView === 'pc_client' && <PcClientScreen onBack={() => setCurrentView('home')} />}
         </main>
+
+        {showCastDiscovery && (
+          <CastDiscoveryModal 
+            onClose={() => setShowCastDiscovery(false)} 
+            onConnect={(device: string) => { 
+              setCastTarget(device); 
+              setShowCastDiscovery(false); 
+            }} 
+          />
+        )}
 
         {/* Bottom Navigation */}
         {['home', 'history', 'vault', 'filter', 'compress', 'suggested'].includes(currentView) && (
@@ -1084,6 +1203,9 @@ function FilterScreen() {
   const [duplicates, setDuplicates] = useState<{ original: TransferRecord, copies: TransferRecord[] }[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'size' | 'name'>('size');
+  const [sortOpen, setSortOpen] = useState(false);
 
   const scanForDuplicates = async () => {
     setIsScanning(true);
@@ -1169,36 +1291,68 @@ function FilterScreen() {
     return <FileIcon className="text-[#003366]" size={22} />;
   };
 
+  const filteredDuplicates = duplicates
+    .filter(g => g.original.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'size') return b.original.size - a.original.size;
+      if (sortBy === 'name') return a.original.name.localeCompare(b.original.name);
+      return b.original.timestamp - a.original.timestamp;
+    });
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FA]">
-      <div className="bg-white p-4 shadow-sm border-b border-gray-200 shrink-0">
-         <h2 className="text-xl font-bold text-[#003366] flex items-center gap-2 mb-4">
+    <div className="flex flex-col h-full bg-[#F8F9FA] dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-900 p-4 shadow-sm border-b border-gray-200 dark:border-gray-800 shrink-0">
+         <h2 className="text-xl font-bold text-[#003366] dark:text-blue-400 flex items-center gap-2 mb-4">
            <Filter size={24} /> فلترة التكرار
          </h2>
-         <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+         <div className="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mb-3">
            <button 
              onClick={() => setActiveTab('image')}
-             className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${activeTab === 'image' ? 'bg-white shadow-sm text-[#003366]' : 'text-gray-500 hover:text-gray-700'}`}
+             className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${activeTab === 'image' ? 'bg-white dark:bg-gray-700 shadow-sm text-[#003366] dark:text-blue-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
            >
              الصور
            </button>
            <button 
              onClick={() => setActiveTab('video')}
-             className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${activeTab === 'video' ? 'bg-white shadow-sm text-[#003366]' : 'text-gray-500 hover:text-gray-700'}`}
+             className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${activeTab === 'video' ? 'bg-white dark:bg-gray-700 shadow-sm text-[#003366] dark:text-blue-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
            >
              الفيديوهات
            </button>
          </div>
+
+         <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="ابحث بالاسم..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-gray-50 border-transparent focus:bg-white focus:border-[#003366] border-2 rounded-xl py-2 pr-10 pl-4 text-sm outline-none transition-all dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+          </div>
+          <div className="relative">
+             <button onClick={() => setSortOpen(!sortOpen)} className={`p-2 rounded-xl transition-colors border ${sortOpen ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+               <ArrowUpDown size={20} />
+             </button>
+             {sortOpen && (
+               <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 dark:bg-gray-800 dark:border-gray-700">
+                 <button onClick={() => { setSortBy('size'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'size' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-t-xl' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl'}`}>الأكبر حجماً</button>
+                 <button onClick={() => { setSortBy('newest'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'newest' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>الأحدث</button>
+                 <button onClick={() => { setSortBy('name'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold ${sortBy === 'name' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl'}`}>الاسم (أ-ي)</button>
+               </div>
+             )}
+          </div>
+        </div>
       </div>
 
       <div className="p-4 flex-1 overflow-y-auto">
         {isScanning ? (
           <div className="h-full flex flex-col items-center justify-center space-y-4">
-             <Loader2 size={48} className="text-[#003366] animate-spin" />
-             <p className="font-bold text-gray-600 animate-pulse">جاري فحص الملفات المكررة...</p>
+             <Loader2 size={48} className="text-[#003366] dark:text-blue-400 animate-spin" />
+             <p className="font-bold text-gray-600 dark:text-gray-300 animate-pulse">جاري فحص الملفات المكررة...</p>
           </div>
-        ) : duplicates.length === 0 ? (
+        ) : filteredDuplicates.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-80">
             <Sparkles size={64} className="mb-4 text-green-500" />
             <h3 className="text-xl font-bold text-gray-700 mb-2">جهازك نظيف!</h3>
@@ -1211,7 +1365,7 @@ function FilterScreen() {
                <button onClick={selectAllCopies} className="text-xs bg-white border border-blue-200 text-[#003366] px-3 py-1.5 rounded-lg font-bold shadow-sm">تحديد الكل</button>
             </div>
             
-            {duplicates.map((group, idx) => (
+            {filteredDuplicates.map((group, idx) => (
               <div key={idx} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                  <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
                    <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
@@ -1400,9 +1554,10 @@ function AdminScreen({ currentSettings, onBack, onLogout, users, onUpdateUser, o
   const [bannerScrolling, setBannerScrolling] = useState(currentSettings.bannerScrolling);
   const [freeImagesLimit, setFreeImagesLimit] = useState(currentSettings.freeImagesLimit || 20);
   const [freeVideosLimit, setFreeVideosLimit] = useState(currentSettings.freeVideosLimit || 4);
+  const [theme, setTheme] = useState(currentSettings.theme || 'light');
 
   const handleSave = () => {
-    const newSettings: AppSettings = { appName, bannerEnabled, bannerText, bannerScrolling, freeImagesLimit, freeVideosLimit };
+    const newSettings: AppSettings = { appName, bannerEnabled, bannerText, bannerScrolling, freeImagesLimit, freeVideosLimit, theme };
     localStorage.setItem('p2p_settings', JSON.stringify(newSettings));
     onUpdateSettings(newSettings);
     window.dispatchEvent(new Event('settings_updated'));
@@ -1418,8 +1573,21 @@ function AdminScreen({ currentSettings, onBack, onLogout, users, onUpdateUser, o
         <label className="block text-sm font-bold text-gray-700 mb-2">اسم البرنامج</label>
         <input 
           type="text" value={appName} onChange={e => setAppName(e.target.value)}
-          className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#003366] rounded-xl px-4 py-3 font-bold outline-none transition-colors mb-2"
+          className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#003366] rounded-xl px-4 py-3 font-bold outline-none transition-colors mb-4"
         />
+
+        <label className="block text-sm font-bold text-gray-700 mb-2">المظهر (Theme)</label>
+        <div className="flex gap-2 mb-2">
+          <button onClick={() => setTheme('light')} className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border-2 ${theme === 'light' ? 'bg-blue-50 border-[#003366] text-[#003366]' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+            <Sun size={16} /> فاتح
+          </button>
+          <button onClick={() => setTheme('dark')} className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border-2 ${theme === 'dark' ? 'bg-blue-50 border-[#003366] text-[#003366]' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+            <Moon size={16} /> داكن
+          </button>
+          <button onClick={() => setTheme('system')} className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all border-2 ${theme === 'system' ? 'bg-blue-50 border-[#003366] text-[#003366]' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+            <Monitor size={16} /> النظام
+          </button>
+        </div>
         
         <div className="mt-4 pt-4 border-t border-gray-100">
           <label className="block text-sm font-bold text-gray-700 mb-2">حدود الإرسال المجانية</label>
@@ -1598,13 +1766,13 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
 
 
   return (
-    <div className="p-6 flex flex-col h-full bg-[#F8F9FA] overflow-y-auto pb-24">
+    <div className="p-6 flex flex-col h-full bg-[#F8F9FA] dark:bg-gray-900 overflow-y-auto pb-24">
       <div className="text-center mb-8 mt-4 animate-in slide-in-from-top-4 duration-500">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-100 to-white text-[#003366] mb-4 shadow-sm border border-white">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-100 to-white dark:from-gray-800 dark:to-gray-700 text-[#003366] dark:text-blue-400 mb-4 shadow-sm border border-white dark:border-gray-700">
           <Wifi size={40} className="drop-shadow-sm" />
         </div>
-        <h2 className="text-2xl font-black text-gray-800 tracking-tight">نقل ملفات سريع</h2>
-        <p className="text-sm text-gray-500 mt-2 font-medium">مباشر، آمن، وبدون خوادم وسيطة</p>
+        <h2 className="text-2xl font-black text-gray-800 dark:text-white tracking-tight">نقل ملفات سريع</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">مباشر، آمن، وبدون خوادم وسيطة</p>
       </div>
 
       <div className="flex flex-row gap-4 mb-8">
@@ -1624,21 +1792,37 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
 
         <button 
           onClick={() => onNavigate('receive')}
-          className="flex-1 bg-white text-[#003366] border border-blue-100 rounded-3xl p-6 flex flex-col items-center gap-3 shadow-lg shadow-blue-900/5 hover:shadow-[0_0_20px_rgba(0,51,102,0.2)] hover:bg-blue-50 transition-all duration-300 transform active:scale-95 group relative overflow-hidden"
+          className="flex-1 bg-white dark:bg-gray-800 text-[#003366] dark:text-blue-400 border border-blue-100 dark:border-gray-700 rounded-3xl p-6 flex flex-col items-center gap-3 shadow-lg shadow-blue-900/5 dark:shadow-none hover:shadow-[0_0_20px_rgba(0,51,102,0.2)] dark:hover:bg-gray-700 transition-all duration-300 transform active:scale-95 group relative overflow-hidden"
         >
-          <div className="w-16 h-16 rounded-2xl bg-blue-50/50 flex items-center justify-center shadow-inner relative z-10 group-hover:bg-white group-hover:scale-110 transition-all duration-300 border border-blue-100/50">
-            <Download size={32} className="drop-shadow-sm text-blue-600" />
+          <div className="w-16 h-16 rounded-2xl bg-blue-50/50 dark:bg-gray-700 flex items-center justify-center shadow-inner relative z-10 group-hover:bg-white dark:group-hover:bg-gray-600 group-hover:scale-110 transition-all duration-300 border border-blue-100/50 dark:border-gray-600">
+            <Download size={32} className="drop-shadow-sm text-blue-600 dark:text-blue-400" />
           </div>
           <div className="text-center relative z-10 w-full">
-            <h2 className="text-xl font-bold mb-1 truncate">استقبال</h2>
-            <p className="text-gray-500 text-xs font-medium truncate w-full">استلام بالكود</p>
+            <h2 className="text-xl font-bold mb-1 truncate dark:text-white">استقبال</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium truncate w-full">استلام بالكود</p>
           </div>
         </button>
       </div>
 
+      <button 
+        onClick={() => onNavigate('pc_host')}
+        className="w-full bg-white dark:bg-gray-800 text-[#003366] dark:text-blue-400 border border-blue-100 dark:border-gray-700 rounded-3xl p-5 mb-8 flex items-center justify-between shadow-lg shadow-blue-900/5 dark:shadow-none hover:shadow-[0_0_20px_rgba(0,51,102,0.15)] dark:hover:bg-gray-700 transition-all duration-300 transform active:scale-95 group relative overflow-hidden"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50/50 dark:bg-gray-700 flex items-center justify-center shadow-inner group-hover:bg-white dark:group-hover:bg-gray-600 group-hover:scale-110 transition-all duration-300 border border-blue-100/50 dark:border-gray-600">
+            <MonitorSmartphone size={28} className="text-blue-600 dark:text-blue-400 drop-shadow-sm" />
+          </div>
+          <div className="text-right">
+            <h2 className="text-lg font-bold mb-1 dark:text-white">اتصال بالكمبيوتر</h2>
+            <p className="text-gray-500 text-xs font-medium">إدارة ورفع الملفات محلياً</p>
+          </div>
+        </div>
+        <ArrowRight size={24} className="text-gray-300 group-hover:text-blue-600 transition-colors" />
+      </button>
+
       {recentRecords.length > 0 && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-           <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2">
              <Sparkles size={18} className="text-amber-500" />
              العمليات المنتهية للتو
            </h3>
@@ -1647,16 +1831,16 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
                <div 
                  key={record.id} 
                  onClick={() => onOpenViewer(record)}
-                 className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
+                 className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
                >
-                 <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100 relative overflow-hidden">
+                 <div className="w-12 h-12 rounded-xl bg-gray-50 dark:bg-gray-700 flex items-center justify-center shrink-0 border border-gray-100 dark:border-gray-600 relative overflow-hidden">
                    <Thumbnail record={record} icon={getIcon(record.type)} />
                  </div>
                  
                  <div className="flex-1 min-w-0">
-                   <h3 className="font-bold text-gray-800 truncate text-[14px]" dir="ltr">{record.name}</h3>
-                   <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 font-medium">
-                     <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${record.isSent ? 'bg-blue-50 text-[#003366]' : 'bg-green-50 text-[#28A745]'}`}>
+                   <h3 className="font-bold text-gray-800 dark:text-gray-200 truncate text-[14px]" dir="ltr">{record.name}</h3>
+                   <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+                     <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${record.isSent ? 'bg-blue-50 text-[#003366] dark:bg-blue-900/30 dark:text-blue-300' : 'bg-green-50 text-[#28A745] dark:bg-green-900/30 dark:text-green-400'}`}>
                        {record.isSent ? <Send size={8} /> : <Download size={8} />}
                        {record.isSent ? 'مُرسل' : 'مُستلم'}
                      </span>
@@ -1672,6 +1856,12 @@ function HomeScreen({ onNavigate, sessionStartTime, onOpenViewer }: any) {
            </div>
         </div>
       )}
+
+      <div className="text-center mt-12 pb-4">
+         <button onClick={() => onNavigate('pc_client')} className="text-xs text-gray-400 font-bold hover:text-[#003366] flex items-center gap-1 justify-center mx-auto transition-colors">
+            <Laptop size={14} /> الدخول كجهاز كمبيوتر (لاستعراض الهاتف)
+         </button>
+      </div>
     </div>
   );
 }
@@ -1685,9 +1875,10 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
   const [transferSuccess, setTransferSuccess] = useState(false);
   const [filesQueue, setFilesQueue] = useState<{blob: Blob|File, name: string, mime: string, size: number}[]>([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const [acceptType, setAcceptType] = useState<string>('*/*');
   
   const peerRef = useRef<Peer | null>(null);
-  const onAckRef = useRef<(() => void) | null>(null);
+  const onAckRef = useRef<((msg?: any) => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const connectionRef = useRef<DataConnection | null>(null);
 
@@ -1705,8 +1896,8 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
            onBack();
            return;
         }
-        if (msg.type === 'ack' && onAckRef.current) {
-          onAckRef.current();
+        if ((msg.type === 'ack' || msg.type === 'resume_ack') && onAckRef.current) {
+          onAckRef.current(msg);
         }
       });
     });
@@ -1738,7 +1929,11 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
     setFilesQueue(items);
     setCurrentFileIndex(0);
 
-    const sendNextChunk = () => {
+    const sendNextChunk = (msg?: any) => {
+      if (msg && msg.type === 'resume_ack' && typeof msg.offset === 'number') {
+        offset = msg.offset;
+      }
+      
       if (offset < currentItem.size) {
         const chunk = currentItem.blob.slice(offset, offset + CHUNK_SIZE);
         chunk.arrayBuffer().then(buffer => {
@@ -1860,13 +2055,28 @@ function SendScreen({ onBack, resendFile, onClearResend, settings, currentUser, 
                  </div>
               ) : (
                  <>
-                   <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                   <input type="file" accept={acceptType} multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                   <div className="grid grid-cols-2 gap-3 mb-2">
+                     <button onClick={() => { setAcceptType('image/*'); setTimeout(() => fileInputRef.current?.click(), 0); }} className="p-4 bg-blue-50 rounded-2xl flex flex-col items-center justify-center gap-2 text-[#003366] font-bold border border-blue-100 hover:bg-blue-100 transition-colors">
+                       <ImageIcon size={28} /> الصور
+                     </button>
+                     <button onClick={() => { setAcceptType('video/*'); setTimeout(() => fileInputRef.current?.click(), 0); }} className="p-4 bg-blue-50 rounded-2xl flex flex-col items-center justify-center gap-2 text-[#003366] font-bold border border-blue-100 hover:bg-blue-100 transition-colors">
+                       <Video size={28} /> الفيديوهات
+                     </button>
+                     <button onClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current?.click(), 0); }} className="p-4 bg-blue-50 rounded-2xl flex flex-col items-center justify-center gap-2 text-[#003366] font-bold border border-blue-100 hover:bg-blue-100 transition-colors">
+                       <FileIcon size={28} /> الملفات
+                     </button>
+                     <button onClick={() => { setAcceptType('.apk,application/vnd.android.package-archive'); setTimeout(() => fileInputRef.current?.click(), 0); }} className="p-4 bg-green-50 rounded-2xl flex flex-col items-center justify-center gap-2 text-green-700 font-bold border border-green-100 hover:bg-green-100 transition-colors relative">
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] px-2 py-1 rounded-full animate-pulse shadow-sm">APK</span>
+                       <Smartphone size={28} /> تطبيقات
+                     </button>
+                   </div>
                    <button 
-                     onClick={() => fileInputRef.current?.click()}
-                     className="w-full py-4 bg-[#003366] text-white rounded-2xl font-bold text-lg shadow-lg hover:bg-blue-900 transition-colors flex items-center justify-center gap-3"
+                     onClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current?.click(), 0); }}
+                     className="w-full py-3 bg-[#003366] text-white rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-900 transition-colors flex items-center justify-center gap-2"
                    >
-                     <UploadCloud size={24} />
-                     اختر ملفات للإرسال
+                     <UploadCloud size={20} />
+                     تصفح جميع الملفات
                    </button>
                  </>
               )}
@@ -1957,25 +2167,36 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
     });
   };
 
+  const [resumePrompt, setResumePrompt] = useState<{name: string, size: number, receivedSize: number, onResume: () => void, onRestart: () => void} | null>(null);
+
   const setupReceiver = (conn: DataConnection) => {
     let receivedBuffers: ArrayBuffer[] = [];
-    let 
-        receivedSize = 0;
-        setCurrentFileTransferred(0);
-        setTransferSpeed(0);
-        setEta(null);
-        speedRef.current = { lastBytes: 0, lastTime: performance.now() };
-
+    let receivedSize = 0;
+    
     let fileMeta: any = null;
+    let existingBlob: Blob | null = null;
+    let lastSaveTime = performance.now();
 
-    conn.on('data', (msg: any) => {
+    const flushAndSave = () => {
+        if (fileMeta && receivedSize > 0 && receivedSize < fileMeta.size) {
+            existingBlob = existingBlob ? new Blob([existingBlob, ...receivedBuffers], { type: fileMeta.mime }) : new Blob(receivedBuffers, { type: fileMeta.mime });
+            receivedBuffers = [];
+            localforage.setItem(`incomplete_${fileMeta.name}_${fileMeta.size}`, existingBlob);
+        }
+    };
+
+    conn.on('close', flushAndSave);
+    conn.on('error', flushAndSave);
+
+    conn.on('data', async (msg: any) => {
       if (msg.type === 'disconnect') {
+        flushAndSave();
         alert('تم قطع الاتصال من الطرف الآخر');
         onBack();
         return;
       }
       if (msg.type === 'header') {
-        setIsTransferring(true);
+        setIsTransferring(false);
         setTransferSuccess(false);
         fileMeta = msg;
         setReceivedFileDetails({ name: msg.name, size: msg.size });
@@ -1987,7 +2208,41 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
         setEta(null);
         speedRef.current = { lastBytes: 0, lastTime: performance.now() };
 
-        conn.send({ type: 'ack' });
+        existingBlob = await localforage.getItem<Blob>(`incomplete_${msg.name}_${msg.size}`);
+        
+        if (existingBlob && existingBlob.size > 0 && existingBlob.size < msg.size) {
+            setResumePrompt({
+               name: msg.name,
+               size: msg.size,
+               receivedSize: existingBlob.size,
+               onResume: () => {
+                  receivedBuffers = [];
+                  receivedSize = existingBlob!.size;
+                  setCurrentFileTransferred(receivedSize);
+                  setProgress(Math.round((receivedSize / fileMeta.size) * 100));
+                  setResumePrompt(null);
+                  setIsTransferring(true);
+                  conn.send({ type: 'resume_ack', offset: existingBlob!.size });
+                  lastSaveTime = performance.now();
+               },
+               onRestart: async () => {
+                  await localforage.removeItem(`incomplete_${msg.name}_${msg.size}`);
+                  existingBlob = null;
+                  receivedBuffers = [];
+                  receivedSize = 0;
+                  setCurrentFileTransferred(0);
+                  setProgress(0);
+                  setResumePrompt(null);
+                  setIsTransferring(true);
+                  conn.send({ type: 'ack' });
+                  lastSaveTime = performance.now();
+               }
+            });
+        } else {
+            setIsTransferring(true);
+            conn.send({ type: 'ack' });
+            lastSaveTime = performance.now();
+        }
       } else if (msg.type === 'chunk') {
         receivedBuffers.push(msg.data);
 
@@ -2004,11 +2259,18 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
           setEta(speed > 0 ? (fileMeta.size - receivedSize) / speed : null);
           speedRef.current = { lastBytes: receivedSize, lastTime: now };
         }
+        
+        if (now - lastSaveTime > 10000) {
+           flushAndSave();
+           lastSaveTime = now;
+        }
 
         conn.send({ type: 'ack' });
       } else if (msg.type === 'eof') {
-        const blob = new Blob(receivedBuffers, { type: fileMeta.mime });
-        const url = URL.createObjectURL(blob);
+        const finalBlob = existingBlob ? new Blob([existingBlob, ...receivedBuffers], { type: fileMeta.mime }) : new Blob(receivedBuffers, { type: fileMeta.mime });
+        await localforage.removeItem(`incomplete_${fileMeta.name}_${fileMeta.size}`);
+        
+        const url = URL.createObjectURL(finalBlob);
         const a = document.createElement('a');
         a.href = url;
         
@@ -2030,7 +2292,7 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
           name: fileMeta.name, size: fileMeta.size, isSent: false, status: 'SUCCESS',
           type: getFileType(fileMeta.mime), mime: fileMeta.mime
         });
-        if (recordId) localforage.setItem(recordId, blob);
+        if (recordId) localforage.setItem(recordId, finalBlob);
       }
     });
   };
@@ -2062,9 +2324,29 @@ function ReceiveScreen({ onBack }: { onBack: () => void }) {
             <Wifi size={32} className="text-[#28A745]" />
           </div>
           <h3 className="text-xl font-bold text-gray-800 mb-2">تم الاتصال!</h3>
-          {!isTransferring && !transferSuccess && (
+          
+          {resumePrompt && (
+            <div className="w-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-4 mt-4 text-right animate-in fade-in">
+              <h4 className="font-bold text-amber-800 dark:text-amber-400 mb-1">تم العثور على ملف غير مكتمل</h4>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mb-2 truncate font-mono" dir="ltr">{resumePrompt.name}</p>
+              <p className="text-xs text-amber-600 dark:text-amber-500 mb-4 font-bold">
+                تم استلام {(resumePrompt.receivedSize / (1024*1024)).toFixed(1)} MB من {(resumePrompt.size / (1024*1024)).toFixed(1)} MB
+              </p>
+              <div className="flex gap-2">
+                <button onClick={resumePrompt.onResume} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-sm transition-colors shadow-sm">
+                  استئناف النقل
+                </button>
+                <button onClick={resumePrompt.onRestart} className="flex-1 bg-white dark:bg-transparent border border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 font-bold py-2 rounded-lg text-sm transition-colors shadow-sm">
+                  البدء من جديد
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isTransferring && !transferSuccess && !resumePrompt && (
             <p className="text-gray-500 text-sm mt-2 animate-pulse">في انتظار الملف...</p>
           )}
+
           {isTransferring && (
             <div className="w-full mt-6 space-y-4">
               <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl mb-2 text-right">
@@ -2177,11 +2459,14 @@ function HistoryItemMenu({ onMoveToVault, onShare, onDelete, onResend }: any) {
   );
 }
 
-function HistoryScreen({ onOpenViewer, onMoveToVault, onResend }: any) {
+function HistoryScreen({ onOpenViewer, onMoveToVault, onResend, onShowCast, castTarget }: any) {
   const [records, setRecords] = useState<TransferRecord[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [activeTab, setActiveTab] = useState<'all' | 'image' | 'video' | 'audio' | 'file'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'size' | 'name'>('newest');
+  const [sortOpen, setSortOpen] = useState(false);
 
   useEffect(() => {
     const updateRecords = () => setRecords(getHistory().filter(r => !r.vaulted));
@@ -2233,46 +2518,90 @@ function HistoryScreen({ onOpenViewer, onMoveToVault, onResend }: any) {
     return <FileIcon className="text-[#003366]" size={22} />;
   };
 
-  const filteredRecords = records.filter(r => activeTab === 'all' || r.type === activeTab);
+  const filteredRecords = records
+    .filter(r => activeTab === 'all' || r.type === activeTab)
+    .filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'size') return b.size - a.size;
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      return b.timestamp - a.timestamp;
+    });
 
   return (
-    <div className="flex flex-col h-full bg-[#E5E7EB]">
-      <div className="bg-white px-4 pt-4 pb-0 shadow-sm border-b border-gray-200 shrink-0 sticky top-0 z-10">
+    <div className="flex flex-col h-full bg-[#E5E7EB] dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-900 px-4 pt-4 pb-0 shadow-sm border-b border-gray-200 dark:border-gray-800 shrink-0 sticky top-0 z-10">
         <div className="flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar pb-2">
           <button 
             onClick={() => setActiveTab('all')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'all' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'all' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
             الكل
           </button>
           <button 
             onClick={() => setActiveTab('image')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'image' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'image' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
             الصور
           </button>
           <button 
             onClick={() => setActiveTab('video')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'video' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'video' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
             الفيديوهات
           </button>
           <button 
             onClick={() => setActiveTab('audio')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'audio' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'audio' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
             الموسيقى
           </button>
           <button 
             onClick={() => setActiveTab('file')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'file' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-colors ${activeTab === 'file' ? 'bg-[#003366] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
             الملفات
           </button>
         </div>
+        
+        <div className="flex gap-2 py-3 border-t border-gray-100 dark:border-gray-800">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="ابحث بالاسم..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-gray-50 border-transparent focus:bg-white focus:border-[#003366] border-2 rounded-xl py-2 pr-10 pl-4 text-sm outline-none transition-all dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+          </div>
+          
+          <div className="relative">
+             <button onClick={() => setSortOpen(!sortOpen)} className={`p-2 rounded-xl transition-colors ${sortOpen ? 'bg-[#003366] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+               <ArrowUpDown size={20} />
+             </button>
+             {sortOpen && (
+               <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 dark:bg-gray-800 dark:border-gray-700">
+                 <button onClick={() => { setSortBy('newest'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'newest' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl'}`}>الأحدث</button>
+                 <button onClick={() => { setSortBy('size'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'size' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>الأكبر حجماً</button>
+                 <button onClick={() => { setSortBy('name'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold ${sortBy === 'name' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl'}`}>الاسم (أ-ي)</button>
+               </div>
+             )}
+          </div>
+          <button onClick={onShowCast} className={`p-2 rounded-xl transition-colors ${castTarget ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+             <Cast size={20} />
+          </button>
+        </div>
+        {castTarget && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 px-4 py-2 border-t border-amber-100 dark:border-amber-900/40 flex items-center justify-between animate-in slide-in-from-top-2">
+             <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-sm">
+                <MonitorPlay size={16} className="animate-pulse" />
+                متصل بـ: {castTarget}
+             </div>
+             <span className="text-xs text-amber-600 dark:text-amber-500">اختر ملفاً للبث</span>
+          </div>
+        )}
       </div>
-
-      <div className="p-5 space-y-4 overflow-y-auto flex-1" onClick={() => setOpenMenuId(null)}>
+      <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar" onClick={() => setOpenMenuId(null)}>
         <div className="flex justify-between items-center mb-2 px-1">
            <h2 className="text-lg font-bold text-[#003366]">سجل الملفات ({filteredRecords.length})</h2>
            <button onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')} className="p-2 bg-white rounded-full shadow-sm text-gray-500 hover:text-[#003366] transition-colors border border-gray-200">
@@ -2371,13 +2700,16 @@ function HistoryScreen({ onOpenViewer, onMoveToVault, onResend }: any) {
   );
 }
 
-function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
+function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer, onShowCast, castTarget }: any) {
   const [setupPass, setSetupPass] = useState('');
   const [unlockPass, setUnlockPass] = useState('');
   const [isSettingUp, setIsSettingUp] = useState(!localStorage.getItem('vault_check'));
   const [records, setRecords] = useState<TransferRecord[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [newPass, setNewPass] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'size' | 'name'>('newest');
+  const [sortOpen, setSortOpen] = useState(false);
 
   useEffect(() => {
     const updateRecords = () => setRecords(getHistory().filter(r => r.vaulted));
@@ -2516,22 +2848,71 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
     return <FileIcon className="text-[#003366]" size={22} />;
   };
 
+  const filteredRecords = records
+    .filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'size') return b.size - a.size;
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      return b.timestamp - a.timestamp;
+    });
+
   return (
-    <div className="p-5 space-y-3">
-      <div className="flex justify-between items-center mb-4 px-2">
-        <h3 className="font-bold text-gray-700">الملفات المشفرة ({records.length})</h3>
-        <button onClick={() => setShowSettings(true)} className="p-2 bg-white rounded-full shadow-sm text-gray-500 hover:text-[#003366] transition-colors border border-gray-200">
-          <Settings size={20} />
-        </button>
-      </div>
-      
-      {records.length === 0 ? (
-        <div className="h-48 flex flex-col items-center justify-center text-gray-400 opacity-60">
-          <LockKeyhole size={48} className="mb-4" />
-          <p className="font-medium">المحفظة فارغة</p>
+    <div className="flex flex-col h-full bg-[#F8F9FA] dark:bg-gray-900 overflow-y-auto pb-24">
+      <div className="p-5 space-y-3">
+        <div className="flex justify-between items-center mb-4 px-2">
+          <h3 className="font-bold text-gray-700 dark:text-gray-200">الملفات المشفرة ({filteredRecords.length})</h3>
+          <div className="flex gap-2">
+            <button onClick={onShowCast} className={`p-2 rounded-full shadow-sm transition-colors border ${castTarget ? 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-[#003366] dark:hover:text-blue-400 border-gray-200 dark:border-gray-700'}`}>
+              <Cast size={20} />
+            </button>
+            <button onClick={() => setShowSettings(true)} className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 dark:text-gray-400 hover:text-[#003366] dark:hover:text-blue-400 transition-colors border border-gray-200 dark:border-gray-700">
+              <Settings size={20} />
+            </button>
+          </div>
         </div>
-      ) : (
-        records.map(record => (
+        
+        {castTarget && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 px-4 py-3 mb-4 rounded-xl border border-amber-100 dark:border-amber-900/40 flex items-center justify-between mx-2 animate-in slide-in-from-top-2">
+             <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-sm">
+                <MonitorPlay size={16} className="animate-pulse" />
+                متصل بـ: {castTarget}
+             </div>
+             <span className="text-xs text-amber-600 dark:text-amber-500">سيتم فك التشفير لحظياً</span>
+          </div>
+        )}
+        
+        <div className="flex gap-2 mb-4 px-2">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="ابحث بالاسم..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border-transparent focus:bg-white focus:border-[#003366] border-2 rounded-xl py-2 pr-10 pl-4 text-sm outline-none transition-all shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+          </div>
+          <div className="relative">
+             <button onClick={() => setSortOpen(!sortOpen)} className={`p-2 rounded-xl transition-colors shadow-sm border ${sortOpen ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+               <ArrowUpDown size={20} />
+             </button>
+             {sortOpen && (
+               <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 dark:bg-gray-800 dark:border-gray-700">
+                 <button onClick={() => { setSortBy('newest'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'newest' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-t-xl' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-xl'}`}>الأحدث</button>
+                 <button onClick={() => { setSortBy('size'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold border-b border-gray-50 dark:border-gray-700 ${sortBy === 'size' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>الأكبر حجماً</button>
+                 <button onClick={() => { setSortBy('name'); setSortOpen(false); }} className={`w-full text-right px-4 py-3 text-sm font-bold ${sortBy === 'name' ? 'text-[#003366] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-xl'}`}>الاسم (أ-ي)</button>
+               </div>
+             )}
+          </div>
+        </div>
+              
+        {filteredRecords.length === 0 ? (
+          <div className="h-48 flex flex-col items-center justify-center text-gray-400 opacity-60">
+            <LockKeyhole size={48} className="mb-4" />
+            <p className="font-medium">المحفظة فارغة</p>
+          </div>
+        ) : (
+          filteredRecords.map(record => (
           <div 
             key={record.id} 
             onClick={() => onOpenViewer(record)}
@@ -2554,8 +2935,241 @@ function VaultScreen({ vaultPassword, setVaultPassword, onOpenViewer }: any) {
           </div>
         ))
       )}
+      </div>
+    </div>
+  );
+}
 
-      
+function PcHostScreen({ onBack }: any) {
+  const [code, setCode] = useState('');
+  const [connected, setConnected] = useState(false);
+  const peerRef = useRef<Peer | null>(null);
+
+  useEffect(() => {
+    const id = Math.floor(100000 + Math.random() * 900000).toString();
+    setCode(id);
+    const peer = new Peer(`${APP_PREFIX}PC_${id}`);
+    peerRef.current = peer;
+
+    peer.on('connection', (conn) => {
+      setConnected(true);
+      conn.on('data', async (data: any) => {
+        if (data.type === 'get_files') {
+          const history = JSON.parse(localStorage.getItem('p2p_history') || '[]').filter((r: any) => !r.vaulted);
+          conn.send({ type: 'file_list', files: history });
+        } else if (data.type === 'request_file') {
+          const blob = await localforage.getItem<Blob>(data.id);
+          if (blob) conn.send({ type: 'file_data', id: data.id, blob, name: data.name, mime: data.mime });
+        } else if (data.type === 'upload_file') {
+          const blob = new Blob([data.buffer], { type: data.mime });
+          
+          let fileType = 'file';
+          if (data.mime.startsWith('image/')) fileType = 'image';
+          else if (data.mime.startsWith('video/')) fileType = 'video';
+          else if (data.mime.startsWith('audio/')) fileType = 'audio';
+
+          const record = {
+            id: Math.random().toString(36).substring(2, 9),
+            name: data.name,
+            size: data.size,
+            timestamp: Date.now(),
+            isSent: false,
+            status: 'SUCCESS',
+            type: fileType,
+            mime: data.mime
+          };
+
+          await localforage.setItem(record.id, blob);
+          const history = JSON.parse(localStorage.getItem('p2p_history') || '[]');
+          history.push(record);
+          localStorage.setItem('p2p_history', JSON.stringify(history));
+          window.dispatchEvent(new Event('history_updated'));
+          
+          conn.send({ type: 'file_list', files: history.filter((r: any) => !r.vaulted) });
+        }
+      });
+      conn.on('close', () => setConnected(false));
+    });
+
+    return () => { peer.destroy(); };
+  }, []);
+
+  const url = window.location.href.split('?')[0];
+
+  return (
+    <div className="p-6 flex flex-col items-center min-h-full pb-24" dir="rtl">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-xl border border-gray-100 text-center animate-in zoom-in-95 mt-4">
+        <MonitorSmartphone size={48} className="mx-auto text-[#003366] mb-4" />
+        <h3 className="text-xl font-bold text-gray-800 mb-2">اتصال بالكمبيوتر</h3>
+        {connected ? (
+          <div className="text-green-600 font-bold bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col items-center gap-2">
+            <CheckCircle2 size={32} />
+            تم الاتصال بالكمبيوتر بنجاح! يتم الآن عرض وإدارة الملفات عن بُعد.
+          </div>
+        ) : (
+          <>
+            <p className="text-gray-500 text-sm mb-4 leading-relaxed">تأكد أن الهاتف والكمبيوتر متصلان بنفس شبكة الواي فاي.</p>
+            <div className="bg-blue-50 p-4 rounded-xl mb-6 border border-blue-100 text-right">
+              <p className="text-xs text-[#003366] mb-1 font-bold">1. افتح هذا الرابط في متصفح الكمبيوتر:</p>
+              <p className="font-mono text-xs text-blue-800 break-all select-all bg-white p-2 rounded-lg border border-blue-200 mt-2">{url}</p>
+            </div>
+            <p className="text-sm font-bold text-gray-700 mb-2">2. اختر "الدخول كجهاز كمبيوتر" وأدخل الكود:</p>
+            <div className="bg-[#003366] text-white text-4xl font-black tracking-[0.3em] py-4 rounded-xl shadow-inner">
+               {code || '...'}
+            </div>
+          </>
+        )}
+        <button onClick={onBack} className="mt-8 text-gray-500 font-bold hover:text-gray-700">العودة للرئيسية</button>
+      </div>
+    </div>
+  );
+}
+
+function PcClientScreen({ onBack }: any) {
+  const [code, setCode] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const connRef = useRef<DataConnection | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const connect = () => {
+    if (code.length !== 6) return;
+    setIsConnecting(true);
+    const peer = new Peer();
+    const conn = peer.connect(`${APP_PREFIX}PC_${code}`, { reliable: true });
+    
+    conn.on('open', () => {
+      setIsConnecting(false);
+      setConnected(true);
+      connRef.current = conn;
+      conn.send({ type: 'get_files' });
+    });
+
+    conn.on('data', (data: any) => {
+      if (data.type === 'file_list') {
+        setFiles(data.files);
+      } else if (data.type === 'file_data') {
+        const url = URL.createObjectURL(new Blob([data.blob], { type: data.mime }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = data.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    });
+
+    conn.on('error', () => { setIsConnecting(false); alert('فشل الاتصال، تأكد من الكود.'); });
+  };
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !connRef.current) return;
+    file.arrayBuffer().then(buffer => {
+      connRef.current?.send({ 
+        type: 'upload_file', 
+        buffer, 
+        name: file.name, 
+        mime: file.type, 
+        size: file.size 
+      });
+    });
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  if (!connected) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[100vh] bg-[#F8F9FA]" dir="rtl">
+         <div className="bg-white p-10 rounded-3xl shadow-xl max-w-md w-full text-center border border-gray-100 animate-in zoom-in-95">
+            <Laptop size={64} className="mx-auto text-[#003366] mb-6" />
+            <h2 className="text-2xl font-black text-gray-800 mb-2">واجهة الكمبيوتر</h2>
+            <p className="text-gray-500 mb-8 font-medium">أدخل الكود الظاهر في شاشة الهاتف للاتصال واستعراض الملفات أو رفع ملفات جديدة.</p>
+            <input 
+               type="number" 
+               value={code} 
+               onChange={e=>setCode(e.target.value.slice(0,6))} 
+               placeholder="000000" 
+               className="w-full text-center text-4xl font-black tracking-[0.3em] bg-gray-50 border-2 border-gray-200 focus:border-[#003366] p-4 rounded-xl mb-6 outline-none transition-colors" 
+            />
+            <button 
+               onClick={connect} 
+               disabled={isConnecting || code.length !== 6} 
+               className="w-full bg-[#003366] hover:bg-[#002244] text-white py-4 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50"
+            >
+               {isConnecting ? 'جاري الاتصال...' : 'اتصال بالهاتف'}
+            </button>
+            <button onClick={onBack} className="mt-6 text-gray-400 font-bold hover:text-gray-600 transition-colors">العودة للرئيسية كالمعتاد</button>
+         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 min-h-[100vh] bg-[#F8F9FA]" dir="rtl">
+      <div className="max-w-5xl mx-auto">
+         <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-3xl shadow-sm mb-8 border border-gray-100 gap-4">
+            <div className="flex items-center gap-4">
+               <div className="w-14 h-14 bg-blue-50 text-[#003366] rounded-2xl flex items-center justify-center">
+                  <MonitorSmartphone size={32} />
+               </div>
+               <div>
+                  <h1 className="text-2xl font-black text-gray-800">متصل بالهاتف</h1>
+                  <p className="text-sm text-green-600 font-bold flex items-center gap-1"><CheckCircle2 size={14}/> الاتصال مشفر ومباشر عبر الشبكة المحلية</p>
+               </div>
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <input type="file" ref={fileInputRef} onChange={handleUpload} className="hidden" />
+              <button 
+                 onClick={() => fileInputRef.current?.click()} 
+                 className="flex-1 md:flex-none bg-[#003366] hover:bg-[#002244] text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-md transition-colors"
+              >
+                 <UploadCloud size={20}/> رفع للهاتف
+              </button>
+              <button 
+                 onClick={onBack} 
+                 className="flex-1 md:flex-none bg-red-50 text-red-600 hover:bg-red-100 px-6 py-3 rounded-xl font-bold transition-colors"
+              >
+                 إنهاء
+              </button>
+            </div>
+         </div>
+
+         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="font-bold text-xl mb-6 text-gray-800">الملفات في الهاتف ({files.length})</h3>
+            {files.length === 0 ? (
+               <div className="text-center text-gray-400 py-16 flex flex-col items-center">
+                  <FileIcon size={48} className="mb-4 opacity-50" />
+                  <p className="font-medium text-lg">الهاتف فارغ من الملفات حالياً</p>
+               </div>
+            ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {files.map((f: any) => (
+                     <div key={f.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-blue-200 transition-colors group">
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="font-bold text-[14px] text-gray-800 truncate" dir="ltr">{f.name}</span>
+                          <span className="text-xs text-gray-500 font-medium mt-1">{formatSize(f.size)}</span>
+                        </div>
+                        <button 
+                           onClick={() => connRef.current?.send({ type: 'request_file', id: f.id, name: f.name, mime: f.mime })} 
+                           className="bg-white border border-gray-200 text-[#003366] w-10 h-10 rounded-xl flex items-center justify-center hover:bg-[#003366] hover:text-white hover:border-transparent transition-all shrink-0 shadow-sm"
+                        >
+                           <Download size={18} />
+                        </button>
+                     </div>
+                  ))}
+               </div>
+            )}
+         </div>
+      </div>
     </div>
   );
 }

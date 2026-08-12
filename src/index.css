@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 body {
     font-family: 'Tajawal', sans-serif;
